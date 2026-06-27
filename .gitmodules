@@ -1,0 +1,6 @@
+[submodule "ReferenceProject/boss-zhipin-mcp"]
+	path = ReferenceProject/boss-zhipin-mcp
+	url = https://github.com/Snseam/boss-zhipin-mcp.git
+[submodule "ReferenceProject/mcp-bosszp"]
+	path = ReferenceProject/mcp-bosszp
+	url = https://github.com/mucsbr/mcp-bosszp.git

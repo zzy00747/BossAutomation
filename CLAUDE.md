@@ -325,3 +325,5 @@ npm start             # 运行 CLI 入口
 - 本仓库没有 Cursor 规则（`.cursorrules` 或 `.cursor/rules/`）或 GitHub Copilot 指令（`.github/copilot-instructions.md`）。
 - 不要把参考 Python 项目当作最终产品；它们仅用于提供 API 端点、登录流程细节和工程模式，供计划中的 TypeScript Agent 参考。
 - 编辑 `ReferenceProject/` 下的文件时，保持改动隔离，确保它们继续可用作参考。
+- `ReferenceProject/` 下的两个项目以 **Git 子模块** 形式引入。首次 clone 后需要执行 `git submodule update --init --recursive` 才能获取其内容。
+- 本仓库统一使用 **LF 换行**。Windows 开发环境请设置 `git config core.autocrlf false`，避免 CRLF 转换干扰。
