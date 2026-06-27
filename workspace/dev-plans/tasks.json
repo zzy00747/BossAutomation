@@ -1,0 +1,798 @@
+[
+  {
+    "id": "M1-T1",
+    "phase": "M1",
+    "phase_name": "项目脚手架与抽象接口",
+    "title": "初始化项目脚手架与依赖",
+    "description": "创建 Node.js + TypeScript 项目骨架，配置 tsx、Vitest、MSW、Pino、better-sqlite3、Playwright-extra 等依赖，完成 .env.example、.gitignore、目录结构。",
+    "depends_on": [],
+    "files_to_create": [
+      "package.json",
+      "tsconfig.json",
+      "vitest.config.ts",
+      "vitest.setup.ts",
+      ".env.example",
+      ".gitignore",
+      "README.md"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "npm install 能成功安装所有依赖",
+      "npx tsc --noEmit 无类型错误",
+      "npm run test 能运行 Vitest（至少有一个占位测试通过）",
+      ".env.example 包含所有必要配置项"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md，完成 Boss 直聘自动投递 Agent 的项目初始化。\n任务：创建 package.json、tsconfig.json、vitest.config.ts、vitest.setup.ts、.env.example、.gitignore、README.md（基础骨架）。\n要求：\n1. 使用 Node.js + TypeScript，运行时用 tsx，生产可 tsc 编译。\n2. 依赖包含：playwright、playwright-extra、puppeteer-extra-plugin-stealth、openai、@anthropic-ai/sdk、zod、better-sqlite3、pino、dotenv、node-cron（可选）、vitest、@vitest/coverage-v8、msw、@types/node。\n3. 在 package.json 添加 scripts：dev、build、start、test、test:unit、test:integration、test:coverage、lint（可选）。\n4. tsconfig 启用 strict、esModuleInterop、resolveJsonModule，输出目录 dist。\n5. vitest.config 配置 test.environment='node'、setupFiles='vitest.setup.ts'、coverage.provider='v8'。\n6. .env.example 列出所有配置：NODE_ENV、DRY_RUN、CDP_URL、CHROME_PATH、OPENAI_API_KEY、ANTHROPIC_API_KEY、LLM_PROVIDER、LLM_MODEL、MATCH_SCORE_THRESHOLD、APPLY_DAILY_LIMIT、DETAIL_CONCURRENCY、LLM_CONCURRENCY、APPLY_CONCURRENCY、SCREENSHOT_DIR、DB_PATH。\n7. .gitignore 忽略 node_modules、dist、data/session、data/logs、data/*.sqlite、.env。\n8. README.md 写项目简介、安装、配置、运行、免责声明占位。\n验收标准：npm install 成功；npx tsc --noEmit 无错；npm run test 至少一个占位测试通过。完成后不要继续实现其他模块。"
+  },
+  {
+    "id": "M1-T2",
+    "phase": "M1",
+    "phase_name": "项目脚手架与抽象接口",
+    "title": "定义核心类型与抽象接口",
+    "description": "定义 IPage、IBrowserDriver、IBossAPIClient、ILLMClient、IJobStorage 等抽象接口，以及 JobDetail、ScreenResult、JobRecord 等公共类型，为后续模块提供依赖注入基础。",
+    "depends_on": ["M1-T1"],
+    "files_to_create": [
+      "src/types.ts",
+      "src/interfaces/browser.ts",
+      "src/interfaces/api.ts",
+      "src/interfaces/llm.ts",
+      "src/interfaces/storage.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "接口覆盖 plan 中列出的方法签名",
+      "类型定义与数据库 schema 对应",
+      " Vitest 接口类型检查测试通过"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“测试工程化”与“关键文件与模块”章节。\n任务：在 src/types.ts 与 src/interfaces/*.ts 定义所有公共类型与抽象接口。\n要求：\n1. src/interfaces/browser.ts：IBrowserDriver { connect, disconnect, getPage, getContext }；IPage { goto, route, unroute, evaluate, click, fill, screenshot, url, close, on, content, locator? }，类型参数尽量通用。\n2. src/interfaces/api.ts：IBossAPIClient { getRecommendJobs(params): Promise<JobListResponse>, getJobDetail(params): Promise<JobDetail>, greetBoss(params): Promise<GreetResult> }；定义 JobListResponse、RecommendJobItem、JobDetail、GreetResult 类型。\n3. src/interfaces/llm.ts：ILLMClient { chat(messages, options): Promise<LLMResponse> }；定义 LLMResponse、Message 类型。\n4. src/interfaces/storage.ts：IJobStorage { saveJob, getJobById, hasJob, blacklistCompany, isBlacklisted, saveDailyStats, getDailyStats, cacheLLM, getLLMCache } 等。\n5. src/types.ts：NormalizedJob、JobRecord、ScreenResult、PipelineConfig、VerificationResult、PageState、JobSearchParams、BossErrorClassified 等。\n6. 所有类型与 ZhipinPlan.md 中的数据库 schema、API 字段保持一致。\n7. 在 src/test/unit/interfaces.spec.ts 写类型编译测试，确认接口可被类实现。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M1-T3",
+    "phase": "M1",
+    "phase_name": "项目脚手架与抽象接口",
+    "title": "实现配置加载与环境校验",
+    "description": "实现 src/config.ts，读取 .env 并做 zod 校验，提供强类型配置对象，设置合理的默认值与运行模式。",
+    "depends_on": ["M1-T1", "M1-T2"],
+    "files_to_create": [
+      "src/config.ts",
+      "src/test/unit/config.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "配置加载支持 .env 文件",
+      "缺少必要配置时给出明确错误",
+      "默认值符合推荐默认配置"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“推荐默认配置”章节。\n任务：实现 src/config.ts，使用 dotenv + zod 读取并校验环境变量。\n要求：\n1. 定义 ConfigSchema zod 对象，包含：NODE_ENV、DRY_RUN(boolean, default true)、CDP_URL(default 'http://localhost:9222')、CHROME_PATH(optional)、LLM_PROVIDER(enum 'openai'|'anthropic', default 'openai')、LLM_MODEL(default 'gpt-4o-mini')、OPENAI_API_KEY、ANTHROPIC_API_KEY、MATCH_SCORE_THRESHOLD(number, default 75)、APPLY_DAILY_LIMIT(default 20)、DETAIL_CONCURRENCY(default 3)、LLM_CONCURRENCY(default 5)、APPLY_CONCURRENCY(default 1)、SCREENSHOT_DIR(default 'data/logs/screenshots')、DB_PATH(default 'data/jobs.sqlite')。\n2. 导出 getConfig() 单例，首次调用时解析 process.env，失败时抛出带字段名的 AggregateError。\n3. 配置对象类型导出 Config。\n4. 单元测试覆盖：默认值、.env 覆盖、非法值报错。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M1-T4",
+    "phase": "M1",
+    "phase_name": "项目脚手架与抽象接口",
+    "title": "实现 pino 日志与截图辅助",
+    "description": "实现 src/logger.ts，封装 pino，支持分级日志、文件落盘、失败自动截图路径记录。",
+    "depends_on": ["M1-T1", "M1-T3"],
+    "files_to_create": [
+      "src/logger.ts",
+      "src/test/unit/logger.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "日志输出到 data/logs/app.log 与控制台",
+      "支持 child logger 携带模块名",
+      "截图路径可被日志字段记录"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“日志”与“错误处理与可观测性”章节。\n任务：实现 src/logger.ts 与单元测试。\n要求：\n1. 使用 pino，根据 NODE_ENV 决定 prettyPrint（开发）或 JSON（生产）。\n2. 默认日志目录 data/logs，文件名 app.log，自动创建目录。\n3. 导出 logger 实例与 createChild(name) 函数。\n4. 提供 logError(error, { url, screenshotPath, operationName }) 辅助函数，将错误类型、URL、截图路径记录为结构化字段。\n5. 单元测试验证 logger.info 输出包含 msg，logError 输出包含 err.type。可用 pino 的 destination+snapshot 测试。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M1-T5",
+    "phase": "M1",
+    "phase_name": "项目脚手架与抽象接口",
+    "title": "初始化测试基础设施与 Mock 接口实现",
+    "description": "创建测试 fixtures、MSW handlers、mock 实现，覆盖 browser/api/llm/storage，保证后续模块可单元/集成测试。",
+    "depends_on": ["M1-T2", "M1-T3"],
+    "files_to_create": [
+      "src/test/fixtures/jobs.ts",
+      "src/test/fixtures/job-detail.ts",
+      "src/test/fixtures/llm-responses.ts",
+      "src/test/msw/handlers.ts",
+      "src/test/__mocks__/mock-browser.ts",
+      "src/test/__mocks__/mock-api-client.ts",
+      "src/test/__mocks__/mock-llm-client.ts",
+      "src/test/__mocks__/mock-storage.ts"
+    ],
+    "files_to_modify": ["vitest.setup.ts"],
+    "acceptance": [
+      "MSW 在测试启动时启用、结束时关闭",
+      "mock 实现覆盖所有接口方法",
+      "fixtures 与真实 API 字段结构一致"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“测试工程化”与“关键文件与模块”章节。\n任务：搭建测试基础设施。\n要求：\n1. src/test/fixtures/jobs.ts：创建 3-5 条 NormalizedJob 示例，包含 encryptJobId、securityId、encryptBossId、lid、jobName、brandName、cityName、salaryDesc、skills 等。\n2. src/test/fixtures/job-detail.ts：创建 JobDetail 示例，包含 postDescription、brandName、location、salary、skills 等。\n3. src/test/fixtures/llm-responses.ts：创建 ScreenResult 示例（match_score、salary_match、location_match、skills_match、red_flags、reason、suggested_greeting）。\n4. src/test/msw/handlers.ts：使用 msw 拦截 https://www.zhipin.com/wapi/zpgeek/pc/recommend/job/list.json 与 /wapi/zpgeek/job/detail.json，返回 fixtures 数据。\n5. src/test/__mocks__/*：实现 MockBrowserDriver、MockPage、MockBossAPIClient、MockLLMClient、MockJobStorage，实现对应接口。\n6. vitest.setup.ts：启动 MSW server。\n验收标准：npm run test:unit 通过；MSW 测试能返回 fixtures。"
+  },
+  {
+    "id": "M2-T1",
+    "phase": "M2",
+    "phase_name": "浏览器与会话管理",
+    "title": "实现 BrowserManager（CDP 连接/自动启动 Chrome/fallback）",
+    "description": "实现 src/browser/manager.ts：CDP 优先连接、端口探测、自动启动系统 Chrome、失败回退到裸 Chromium。",
+    "depends_on": ["M1-T2", "M1-T4"],
+    "files_to_create": [
+      "src/browser/manager.ts",
+      "src/test/unit/browser/manager.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "能连接 localhost:9222",
+      "端口未监听时自动启动 Chrome",
+      "fallback 到裸 Chromium 可启动",
+      "提供 disconnect 与 getContext 方法"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“登录模块详细设计”与“内存管理”章节。\n任务：实现 src/browser/manager.ts 的 BrowserManager 类。\n要求：\n1. 构造函数接收 { cdpUrl?: string; ports?: number[]; chromePath?: string; headless?: boolean; userDataDir?: string; launchTimeout?: number; restartIntervalMs?: number }。\n2. connect()：先尝试 cdpUrl，再按 ports [9222,9229,19222] 探测 /json/version；若都没找到则调用 launchSystemChrome(port=9222) 启动系统 Chrome；仍失败则用 playwright.launch 启动裸 Chromium。\n3. launchSystemChrome：按平台找 chrome.exe/Google Chrome/google-chrome，传入 --remote-debugging-port、--user-data-dir、--disable-blink-features=AutomationControlled、--no-first-run。等待 /json/version 可达。\n4. 获取 context 与 page，支持 getContext()、getPage()、disconnect()。\n5. 实现 1 小时浏览器自动重启：记录 connectedAt，超过 restartIntervalMs 后关闭并重连。\n6. 单元测试使用 Mock，验证端口探测、启动参数构造、fallback 路径；真实浏览器测试标记为 skip 或集成测试。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M2-T2",
+    "phase": "M2",
+    "phase_name": "浏览器与会话管理",
+    "title": "实现 PagePool 页面池",
+    "description": "实现 src/browser/page-pool.ts，限制并发 page 数量，支持 acquire/release/关闭策略。",
+    "depends_on": ["M1-T2", "M2-T1"],
+    "files_to_create": [
+      "src/browser/page-pool.ts",
+      "src/test/unit/browser/page-pool.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "最大并发数默认 3",
+      "acquire 超过上限时等待或复用",
+      "release 后关闭页面"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“内存管理”章节。\n任务：实现 src/browser/page-pool.ts。\n要求：\n1. PagePool 类接收 context: BrowserContext 与 maxPages（默认 3）。\n2. acquire(): Promise<Page>，当 activePages.size >= maxPages 时释放最早的页面再创建新页面。\n3. release(page): 从 activePages 删除并尝试 page.close() 忽略错误。\n4. releaseAll(): 关闭所有页面。\n5. 单元测试用 mock context，验证并发限制与关闭行为。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M2-T3",
+    "phase": "M2",
+    "phase_name": "浏览器与会话管理",
+    "title": "实现人类行为模拟",
+    "description": "实现 src/browser/human-actions.ts，提供贝塞尔曲线鼠标移动、随机停顿、分段滚动等人形操作。",
+    "depends_on": ["M1-T2"],
+    "files_to_create": [
+      "src/browser/human-actions.ts",
+      "src/test/unit/browser/human-actions.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "鼠标移动使用多步贝塞尔曲线",
+      "点击前随机等待 200-800ms",
+      "滚动分段并随机停顿",
+      "随机 sleep 函数支持 min/max"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“反检测与合规策略”章节。\n任务：实现 src/browser/human-actions.ts。\n要求：\n1. sleep(ms) / randomSleep(min, max)。\n2. humanizedMouseMove(page, targetSelector)：计算起点到终点的多段路径，使用二次贝塞尔曲线，每步 10-20ms，加入随机抖动。\n3. humanizedClick(page, selector)：先 sleep 200-800ms，再 humanizedMouseMove，再 click。\n4. humanizedScroll(page, { direction, distance, steps })：分段滚动，每段后 randomSleep 300-1000ms。\n5. 单元测试用 MockPage 验证调用次数、坐标在合理范围、时间跨度符合预期。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M2-T4",
+    "phase": "M2",
+    "phase_name": "浏览器与会话管理",
+    "title": "实现反检测 Stealth 注入",
+    "description": "实现 src/browser/stealth.ts，注入 JS 覆盖 navigator.webdriver、plugins、chrome、Permissions、Canvas/WebGL 等检测点。",
+    "depends_on": ["M1-T2"],
+    "files_to_create": [
+      "src/browser/stealth.ts",
+      "src/test/unit/browser/stealth.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "注入脚本覆盖 webdriver、plugins、chrome 对象",
+      "Permissions query 返回合理结果",
+      "可与 Playwright-extra-stealth 结合使用"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“反检测与合规策略”章节。\n任务：实现 src/browser/stealth.ts。\n要求：\n1. 导出 getStealthScripts(): string[]，每个脚本为 IIFE 字符串。\n2. 覆盖 navigator.webdriver = undefined；navigator.plugins 提供 3 个 Plugin；window.chrome 存在 runtime/app；Permissions.prototype.query 返回 { state: 'prompt'/'granted' }；Canvas/WebGL 对 getParameter 返回常见值或添加噪声。\n3. 提供 applyStealthToPage(page: IPage) 函数，按顺序 evaluate 所有脚本。\n4. 单元测试验证脚本字符串包含关键覆盖点。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M2-T5",
+    "phase": "M2",
+    "phase_name": "浏览器与会话管理",
+    "title": "实现验证码检测与暂停",
+    "description": "实现 src/browser/verification.ts，检测 verify/captcha 选择器与文本，截图并暂停等待人工处理。",
+    "depends_on": ["M1-T2", "M1-T4"],
+    "files_to_create": [
+      "src/browser/verification.ts",
+      "src/test/unit/browser/verification.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "检测 .verify-wrap/.captcha/.slider-verify 及文本",
+      "检测到验证时截图保存到 SCREENSHOT_DIR",
+      "返回 VerificationResult 并暂停流程"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“验证码/反爬检测”与“验证码检测模块”章节。\n任务：实现 src/browser/verification.ts。\n要求：\n1. VerificationResult { needsVerification: boolean; screenshotPath?: string; message?: string }。\n2. checkVerification(page: IPage): Promise<VerificationResult|null>，依次检查选择器：.verify-wrap、.captcha、.slider-verify、[class*=\"verify\"]、[class*=\"captcha\"]；再检查页面文本是否包含“安全验证/滑动验证/请完成验证”。\n3. 检测到后按 SCREENSHOT_DIR/verification_${timestamp}.png 截图，日志 warn。\n4. pauseForHumanVerification(message)：在 CLI 模式下使用 readline 等待用户按回车继续（如非 TTY 则只记录日志并 sleep 5 秒循环）。\n5. 单元测试用 MockPage 模拟 DOM 与 content，验证检测与截图调用。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M2-T6",
+    "phase": "M2",
+    "phase_name": "浏览器与会话管理",
+    "title": "实现登录态检查与 CDP 登录脚本",
+    "description": "实现 src/platform/boss/auth.ts 的登录态检查与 CDP 登录流程，提供 scripts/login.ts 用于手动验证。",
+    "depends_on": ["M2-T1", "M2-T5"],
+    "files_to_create": [
+      "src/platform/boss/auth.ts",
+      "src/platform/boss/selectors.ts",
+      "scripts/login.ts"
+    ],
+    "files_to_modify": ["src/platform/boss/urls.ts"],
+    "acceptance": [
+      "isLoggedIn 能识别 Boss 页面的登录元素",
+      "未登录时导航到首页再检查",
+      "scripts/login.ts 可连接浏览器并保存 session"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“登录模块详细设计”章节。\n任务：实现 src/platform/boss/auth.ts、selectors.ts、urls.ts（登录相关）与 scripts/login.ts。\n要求：\n1. urls.ts：导出 BOSS_BASE_URL='https://www.zhipin.com'，RECOMMEND_JOBS_URL，JOB_DETAIL_API，GREET_API，LOGIN_PAGE_URL。\n2. selectors.ts：导出登录态相关选择器数组：.user-nav、.nav-figure、.menu-list、.btn-post-job，以及 body.login class 检查。\n3. auth.ts：isLoggedIn(page)：若当前 URL 不是 zhipin.com 则 goto LOGIN_PAGE_URL；检查 body class 与上述选择器；返回 boolean。loginViaCDP(browserManager)：connect、getPage、isLoggedIn，若登录则保存 storage_state 到 data/session/boss.json。\n4. scripts/login.ts：实例化 BrowserManager 与 auth，运行后输出登录态与 session 路径。\n5. 单元测试用 MockPage 验证 isLoggedIn 对登录/未登录 DOM 的判定。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过；scripts/login.ts 可运行（CLI 测试可 Dry-run）。"
+  },
+  {
+    "id": "M2-T7",
+    "phase": "M2",
+    "phase_name": "浏览器与会话管理",
+    "title": "实现二维码登录兜底（fp、security-check）",
+    "description": "实现 QR 登录流程、fp 生成、security-check stoken 获取与 scripts/login-qr.ts。",
+    "depends_on": ["M2-T6"],
+    "files_to_create": [
+      "src/platform/boss/fingerprint.ts",
+      "src/platform/boss/security-check.ts",
+      "scripts/login-qr.ts"
+    ],
+    "files_to_modify": ["src/platform/boss/auth.ts"],
+    "acceptance": [
+      "fp 使用 AES-128-CBC/PKCS7 生成",
+      "二维码登录各 API 步骤可被调用",
+      "security-check 页面获取 __zp_stoken__"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“登录方式：CDP 优先 + 自动登录兜底”与“fp 设备指纹”章节。\n任务：实现 src/platform/boss/fingerprint.ts、security-check.ts 与 scripts/login-qr.ts。\n要求：\n1. fingerprint.ts：generateFingerprint(plaintext, keyBase64) 使用 crypto.createCipheriv('aes-128-cbc', key, iv) 与 PKCS7 padding，返回 base64(iv+encrypted)。提供硬编码 key 与 fallback 从页面 JS 提取的逻辑占位。\n2. security-check.ts：getStokenFromSecurityCheck(page)：访问 security-check.html，从 set-cookie 或 JS 提取 __zp_stoken__。\n3. scripts/login-qr.ts：实现 QR 登录流程：调用 randkey 获取 qrId → 生成二维码图片 → 长轮询 scan/scanLogin → dispatcher（带 fp）获取 cookie → 访问 security-check 获取 stoken → 保存 data/session/boss-qr.json。若当前未连接浏览器则用裸 Chromium 启动。\n4. auth.ts 增加 loginWithQR() 入口，将结果保存 session。\n5. 单元测试仅验证 fp 加密可逆/格式正确、URL 模板生成正确。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M2-T8",
+    "phase": "M2",
+    "phase_name": "浏览器与会话管理",
+    "title": "实现 SessionManager 过期检测与自动刷新",
+    "description": "实现 src/platform/boss/session-manager.ts，周期性检查登录态，过期时自动刷新或触发 QR 兜底。",
+    "depends_on": ["M2-T6", "M2-T7"],
+    "files_to_create": [
+      "src/platform/boss/session-manager.ts",
+      "src/test/unit/platform/session-manager.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "5 分钟内重复检查直接返回缓存结果",
+      "DOM 不确定时用 API 探针",
+      "刷新策略：CDP 重连 > 页面 reload > QR 兜底",
+      "支持 onExpired 回调注册"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“登录态过期检测与自动刷新”章节。\n任务：实现 src/platform/boss/session-manager.ts。\n要求：\n1. SessionManager 依赖 page、authService（含 reconnectCDP/loginWithQR）、logger。\n2. checkLoginState(force=false)：5 分钟内检查过且有效则直接返回；否则先 DOM 检查，不确定时调用 API 探针（如 /wapi/zpgeek/pc/recommend/job/list.json 轻量请求）。\n3. 若未登录，调用 refreshSession()：先尝试 reconnectCDP；再 page.reload 后 DOM 检查；最后触发 QR 登录兜底。\n4. 提供 onExpired(callback) 注册刷新失败回调。\n5. 在关键路径调用：search 前、处理 N 个职位后、apply 前、API 401 后。\n6. 单元测试用 MockPage 与 MockAuthService 验证缓存、DOM/API 检查、刷新策略回退。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M3-T1",
+    "phase": "M3",
+    "phase_name": "职位数据获取与解析",
+    "title": "实现 URL/常量与选择器兜底",
+    "description": "完成 src/platform/boss/urls.ts 与 selectors.ts，集中管理所有 URL 模板与 DOM 选择器，便于后续结构变更时统一修改。",
+    "depends_on": ["M1-T1", "M1-T2"],
+    "files_to_create": [
+      "src/platform/boss/urls.ts",
+      "src/platform/boss/selectors.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "覆盖推荐列表、详情 API、详情页、打招呼 API、登录页、security-check",
+      "选择器覆盖职位卡片、登录态元素"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“关键参考发现”与“关键文件与模块”。\n任务：补全 src/platform/boss/urls.ts 与 selectors.ts。\n要求：\n1. urls.ts 导出所有 URL 模板函数：getRecommendJobsUrl(params)、getJobDetailApiUrl(encryptJobId)、getJobDetailPageUrl(encryptJobId)、getGreetUrl(securityId, jobId)、getSecurityCheckUrl()、getQRApis()（randkey/qrcode/scan/scanLogin/dispatcher）。\n2. selectors.ts 导出 JOB_CARD_SELECTOR、JOB_TITLE_SELECTOR、JOB_SALARY_SELECTOR、LOGIN_CHECK_SELECTORS、VERIFY_SELECTORS 等常量。\n3. 单元测试验证 URL 拼接正确。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M3-T2",
+    "phase": "M3",
+    "phase_name": "职位数据获取与解析",
+    "title": "实现页面状态抽取与字段探测",
+    "description": "实现 state-extractor.ts 与 field-detector.ts，抽取 window.__NUXT__ / __INITIAL_STATE__ 并自动探测 jobList 字段路径。",
+    "depends_on": ["M1-T2", "M3-T1"],
+    "files_to_create": [
+      "src/platform/boss/state-extractor.ts",
+      "src/platform/boss/field-detector.ts",
+      "src/test/unit/platform/state-extractor.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "能从 window.__NUXT__ 提取 state",
+      "能从多个候选路径提取 jobList",
+      "字段探测器给出可用字段名列表"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“页面初始状态抽取”章节。\n任务：实现 src/platform/boss/state-extractor.ts 与 field-detector.ts。\n要求：\n1. state-extractor.ts：extractPageState(page) 返回 { nuxt, initialState }；extractJobsFromState(state) 遍历 nuxt.data[0].jobList、nuxt.state.job.jobList、nuxt.state.recommend.jobList、initialState.job.jobList、initialState.recommend.jobList、initialState.search.jobList，返回首个非空数组的 NormalizedJob[]。\n2. field-detector.ts：detectJobIdFields(jobItem) 返回 { encryptJobId, securityId, encryptBossId, lid } 等字段名映射，优先按已知别名匹配，否则通过模糊匹配。\n3. 单元测试使用 page.evaluate mock 返回各种 state 结构。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M3-T3",
+    "phase": "M3",
+    "phase_name": "职位数据获取与解析",
+    "title": "实现职位 ID 与字段规范化",
+    "description": "实现 normalize.ts，将不同 API 返回的字段统一为 NormalizedJob，确保去重、存储、投递使用一致主键。",
+    "depends_on": ["M1-T2", "M3-T2"],
+    "files_to_create": [
+      "src/platform/boss/normalize.ts",
+      "src/test/unit/platform/normalize.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "encryptJobId 兼容 encryptJobId/jobId/encryptId/id/URL 提取",
+      "securityId、encryptBossId、lid 等字段有 fallback",
+      "缺少主键时返回 null"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“职位 ID 字段名规范化”章节。\n任务：实现 src/platform/boss/normalize.ts。\n要求：\n1. NormalizedJob 接口包含 encryptJobId、securityId?、encryptBossId?、lid?、jobName、brandName、cityName、areaDistrict、salaryDesc、jobExperience、jobDegree、skills、industry、brandScaleName、jobDetailUrl?。\n2. normalizeJob(raw)：主键 fallback encryptJobId > jobId > encryptId > id > extractJobIdFromUrl(detailUrl)；securityId fallback securityId > encryptSecurityId > secId；bossId fallback encryptBossId > bossId；lid fallback lid > lId > listId；jobName fallback jobName > title > name。\n3. extractJobIdFromUrl(url) 从 /job_detail/{id}.html 提取。\n4. 单元测试覆盖所有字段别名组合与缺失主键返回 null。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M3-T4",
+    "phase": "M3",
+    "phase_name": "职位数据获取与解析",
+    "title": "实现 CookieManager 与 RequestBuilder",
+    "description": "实现 cookie-manager.ts 与 request-builder.ts，从 CDP context 自动提取 Cookie 并构造完整请求头。",
+    "depends_on": ["M1-T2", "M2-T1"],
+    "files_to_create": [
+      "src/platform/boss/cookie-manager.ts",
+      "src/platform/boss/request-builder.ts",
+      "src/test/unit/platform/cookie-manager.spec.ts",
+      "src/test/unit/platform/request-builder.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "能拼接 Cookie 字符串",
+      "请求头包含 Host/User-Agent/Referer/Origin/X-Requested-With/Cookie/Sec-Fetch-*",
+      "User-Agent 与浏览器一致"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“请求头/Cookie 完整模拟”章节。\n任务：实现 src/platform/boss/cookie-manager.ts 与 request-builder.ts。\n要求：\n1. CookieManager：getCookies() 调用 context.cookies('https://www.zhipin.com')；getCookieString() 拼接 name=value;。\n2. RequestBuilder：依赖 cookieManager 与 page。buildHeaders({referer?}) 返回 Host='www.zhipin.com'、User-Agent（从 page.evaluate(()=>navigator.userAgent) 或 context 获取）、Accept、Accept-Language='zh-CN,zh;q=0.9'、Referer、Origin='https://www.zhipin.com'、X-Requested-With='XMLHttpRequest'、Cookie、Sec-Fetch-Dest/Mode/Site。\n3. 单元测试使用 MockBrowserContext 与 MockPage。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M3-T5",
+    "phase": "M3",
+    "phase_name": "职位数据获取与解析",
+    "title": "实现 BossAPIClient（route 拦截 + 直接请求 fallback）",
+    "description": "实现 src/platform/boss/api.ts，封装推荐职位、职位详情、打招呼 API，优先使用 Playwright route 拦截，失败则用构造请求头直接请求。",
+    "depends_on": ["M1-T2", "M2-T1", "M3-T4"],
+    "files_to_create": [
+      "src/platform/boss/api.ts",
+      "src/test/unit/platform/api.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "实现 IBossAPIClient 三个方法",
+      "推荐职位支持 experience/jobType/salary/page/pageSize 参数",
+      "请求失败时抛出的错误包含状态码与响应体"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“职位列表 API”“打招呼 API”“请求头/Cookie 完整模拟”章节。\n任务：实现 src/platform/boss/api.ts 的 BossAPIClient。\n要求：\n1. 构造函数接收 { context, pagePool? requestBuilder }，提供 getRecommendJobs(params)、getJobDetail(encryptJobId, {securityId?})、greetBoss(securityId, encryptJobId)。\n2. 推荐职位 URL：https://www.zhipin.com/wapi/zpgeek/pc/recommend/job/list.json；打招呼 URL：https://www.zhipin.com/wapi/zpgeek/friend/add.json?securityId=&jobId=。\n3. 先尝试 route 拦截缓存：api.ts 可要求上层在调用前对 page.route 注册拦截（或内部复用已有 BossDataCollector 的 response 监听）。直接请求 fallback 使用 requestBuilder.buildHeaders + fetch/axios（Node 18+ 用 fetch），带完整 Cookie。\n4. 对响应做基础校验，code!==0 时抛出 BossAPIError（继承 Error，含 code、message、resBody）。\n5. 单元测试使用 MSW + MockRequestBuilder 覆盖成功、业务错误、网络错误。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 与 test:integration 通过。"
+  },
+  {
+    "id": "M3-T6",
+    "phase": "M3",
+    "phase_name": "职位数据获取与解析",
+    "title": "实现搜索参数适配器与翻页",
+    "description": "实现 search-params.ts 与 search.ts，完成中文条件到数字代码映射、参数构造、自适应翻页。",
+    "depends_on": ["M1-T2", "M3-T1", "M3-T5"],
+    "files_to_create": [
+      "src/platform/boss/search-params.ts",
+      "src/platform/boss/search.ts",
+      "src/test/unit/platform/search-params.spec.ts",
+      "src/test/unit/platform/search.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "经验/类型/薪资中文值正确映射为代码",
+      "翻页支持 page 与 cursor 两种模式",
+      "可配置最大页数与去重"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“推荐列表参数与翻页”章节。\n任务：实现 src/platform/boss/search-params.ts 与 search.ts。\n要求：\n1. search-params.ts：定义 JobSearchParams 接口；createSearchParams(raw:{experience?,jobType?,salary?,page?,pageSize?,encryptExpectId?,cursor?}) 将中文经验/类型/薪资映射为数字代码（在校生=108，应届生=102，不限=101，一年以内=103，一到三年=104，三到五年=105，五到十年=106，十年以上=107；全职=1901，兼职=1903；3k以下=402，3-5k=403，5-10k=404，10-20k=405，20-50k=406，50以上=407）；默认 pageSize=15。\n2. search.ts：JobSearchService 依赖 apiClient、storage、logger。fetchAllPages(baseParams, maxPages=5) 循环请求，若响应有 cursor 则用 cursor，否则 page++；去重：跳过 storage.hasJob 的职位；返回 NormalizedJob[]。\n3. 每翻页前 randomSleep(8s, 15s)。\n4. 单元测试覆盖映射、翻页、去重、sleep。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M3-T7",
+    "phase": "M3",
+    "phase_name": "职位数据获取与解析",
+    "title": "实现多层数据获取器（DataCollector）",
+    "description": "实现 data-collector.ts，按 Layer 0-4 + fallback + DOM 兜底收集职位列表，并记录每层命中数量。",
+    "depends_on": ["M1-T2", "M2-T1", "M3-T2", "M3-T3"],
+    "files_to_create": [
+      "src/platform/boss/data-collector.ts",
+      "src/test/unit/platform/data-collector.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "按 Layer0→Layer4→fallback→DOM 顺序尝试",
+      "每层结果做 normalizeJob 规范化",
+      "日志记录每层捕获数量"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“多层数据获取策略”章节。\n任务：实现 src/platform/boss/data-collector.ts。\n要求：\n1. BossDataCollector 依赖 page、logger，可选 CDP client。\n2. collectFromPage(page): Promise<NormalizedJob[]>：\n   - Layer0：extractPageState → extractJobsFromState；\n   - Layer1：使用 page.route 拦截 /pc/recommend/job/list.json；\n   - Layer2：page.on('response') 监听 job/list.json 与 job/detail.json；\n   - Layer3：CDP Network.domain 监听；\n   - Layer4：evaluate 注入 fetch/XHR/WebSocket 拦截器，将响应写入 window.__BOSS_COLLECTED__；\n   - Fallback：直接 API 请求；\n   - DOM：parseJobsFromDOM 按 selectors 解析卡片。\n3. 每层结果 normalizeJob，去重后记录命中数量到 logger。\n4. 单元测试分层 mock，验证 Layer0 命中则跳过其他层；未命中时依次降级。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M3-T8",
+    "phase": "M3",
+    "phase_name": "职位数据获取与解析",
+    "title": "实现职位详情双轨获取",
+    "description": "实现 job-detail.ts，优先 API 详情，缺失时合并 HTML 详情页，详情缓存 7 天。",
+    "depends_on": ["M1-T2", "M3-T3", "M3-T5"],
+    "files_to_create": [
+      "src/platform/boss/job-detail.ts",
+      "src/test/unit/platform/job-detail.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "API 详情可返回结构化数据",
+      "HTML 详情可提取职位描述与公司信息",
+      "合并后 postDescription 非空",
+      "缓存命中时跳过请求"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“职位详情双轨获取”章节。\n任务：实现 src/platform/boss/job-detail.ts。\n要求：\n1. JobDetailService 依赖 apiClient、pagePool、storage、logger。\n2. getJobDetail(job: NormalizedJob)：先 getDetailFromAPI；若无 postDescription 则 mergeWithHTMLDetail；若 API 有描述也可再取 HTML 做补充合并。\n3. HTML 详情：用 page.goto('/job_detail/{encryptJobId}.html')，提取职位名、薪资、描述、公司规模、工作地址等文本。\n4. 缓存：storage.getJobById 的 html_detail_json/api_detail_json 字段，7 天内有效（可用 llm_cached_at 或新增 detail_cached_at）。\n5. 单元测试使用 MockAPIClient 与 MockPage。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M3-T9",
+    "phase": "M3",
+    "phase_name": "职位数据获取与解析",
+    "title": "实现 securityId 多层解析",
+    "description": "实现 security-id-resolver.ts，从列表、详情 API、详情页 DOM/URL 多层解析并验证有效 securityId。",
+    "depends_on": ["M1-T2", "M3-T5", "M3-T8"],
+    "files_to_create": [
+      "src/platform/boss/security-id-resolver.ts",
+      "src/test/unit/platform/security-id-resolver.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "优先使用 job.securityId",
+      "失效时依次从详情 API、详情页提取",
+      "validate 能判断 securityId 是否可用"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“securityId 多层解析”章节。\n任务：实现 src/platform/boss/security-id-resolver.ts。\n要求：\n1. SecurityIdResolver 依赖 apiClient、pagePool?、logger。\n2. resolve(job, options={forceRefresh:false})：\n   - 若 job.securityId 存在且 !forceRefresh，调用 validate(securityId, encryptJobId) 返回；\n   - 否则 getJobDetailAPI 获取 detail.securityId 并 validate；\n   - 否则打开详情页 extractFromJobPage 提取 URL 参数或 JS 变量。\n3. validate(securityId, encryptJobId) 可先调用打招呼 API 预检（推荐不实际发送），或仅检查非空与长度。\n4. 单元测试覆盖缓存命中、API 获取、DOM 提取三种场景。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M3-T10",
+    "phase": "M3",
+    "phase_name": "职位数据获取与解析",
+    "title": "实现错误分类与分类重试执行器",
+    "description": "实现 errors.ts 与 src/utils/retry.ts，对 401/403/429/5xx/超时/业务错误分类，并执行对应重试/暂停/刷新策略。",
+    "depends_on": ["M1-T2", "M2-T8"],
+    "files_to_create": [
+      "src/platform/boss/errors.ts",
+      "src/utils/retry.ts",
+      "src/test/unit/utils/retry.spec.ts",
+      "src/test/unit/platform/errors.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "401→needsAuthRefresh",
+      "403→needsHumanIntervention",
+      "429→retryable + 指数退避 + 降速",
+      "重试次数与退避可配置"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“分类重试策略”章节。\n任务：实现 src/platform/boss/errors.ts 与 src/utils/retry.ts。\n要求：\n1. errors.ts：定义 BossErrorType 枚举（UNAUTHORIZED/FORBIDDEN/RATE_LIMITED/TIMEOUT/SERVER_ERROR/BUSINESS_ERROR/NETWORK_ERROR/UNKNOWN）；classifyError(error) 返回 { type, retryable, needsAuthRefresh, needsHumanIntervention, original }。HTTP 401 或业务码 3001 → UNAUTHORIZED/needsAuthRefresh；403 → FORBIDDEN/needsHumanIntervention；429 → RATE_LIMITED/retryable；408/ECONNRESET → TIMEOUT/retryable；5xx → SERVER_ERROR/retryable；业务 code!=0 → BUSINESS_ERROR（按具体码决定是否 retryable）。\n2. retry.ts：ClassifiedRetryExecutor 依赖 sessionManager、rateLimiter、logger。execute(operation, context) 循环 maxAttempts，每次先 checkLoginState；catch 后按分类处理：人工干预调用 pauseForHumanVerification；auth 刷新调用 refreshSession；retryable 且未达上限则 calculateBackoff(attempt) + rate limit penalty 后重试。\n3. 单元测试覆盖各种错误分类与重试路径。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M4-T1",
+    "phase": "M4",
+    "phase_name": "LLM 筛选模块",
+    "title": "实现多 Provider LLM 客户端",
+    "description": "实现 src/llm/client.ts，统一封装 OpenAI 与 Anthropic SDK，支持 JSON mode / function calling 调用。",
+    "depends_on": ["M1-T2", "M1-T3"],
+    "files_to_create": [
+      "src/llm/client.ts",
+      "src/test/unit/llm/client.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "支持 openai 与 anthropic provider",
+      "chat 方法返回 { content, usage? }",
+      "可配置 model、temperature、maxTokens",
+      "失败时抛出可识别错误"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“LLM”与“技术栈”章节。\n任务：实现 src/llm/client.ts。\n要求：\n1. LLMClient 实现 ILLMClient，构造函数接收 { provider, apiKey, model, baseURL?, temperature=0.2, maxTokens=2048 }。\n2. chat(messages, options?)：根据 provider 调用 openai.chat.completions.create 或 anthropic.messages.create，统一返回 { content: string, usage?: { promptTokens, completionTokens } }。\n3. 支持 response_format={type:'json_object'}（OpenAI）或显式 JSON 指令（Anthropic）。\n4. 处理常见错误：401→配置错误；429→限流；5xx→服务错误。\n5. 单元测试使用 mock 替换 SDK，验证 provider 分支与 JSON 返回。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M4-T2",
+    "phase": "M4",
+    "phase_name": "LLM 筛选模块",
+    "title": "实现 JD 筛选 Prompt 与 Zod Schema",
+    "description": "实现 src/llm/prompts/jd-screen.ts 与 src/llm/schema.ts，定义 JD 筛选的输入结构与输出结构。",
+    "depends_on": ["M1-T2", "M4-T1"],
+    "files_to_create": [
+      "src/llm/prompts/jd-screen.ts",
+      "src/llm/schema.ts",
+      "src/test/unit/llm/schema.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "Prompt 输出纯 JSON、无额外解释",
+      "Zod Schema 与 ScreenResult 一致",
+      "包含示例（few-shot）提升稳定性"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“LLM JD 筛选设计”章节。\n任务：实现 src/llm/prompts/jd-screen.ts 与 src/llm/schema.ts。\n要求：\n1. schema.ts：用 zod 定义 ScreenResultSchema { match_score: z.number().min(0).max(100), salary_match: z.boolean(), location_match: z.boolean(), skills_match: z.number().min(0).max(100), red_flags: z.array(z.string()), reason: z.string(), suggested_greeting: z.string() }，并导出类型 ScreenResult。\n2. jd-screen.ts：导出 buildJDScreenPrompt(jobIntent: string, job: JobDetail): string。Prompt 角色为求职顾问，要求只输出 JSON，字段与 schema 一致；包含 1-2 个 few-shot 示例；明确阈值含义。\n3. 单元测试验证 schema 对合法/非法输入的解析，以及 prompt 包含必要占位符。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M4-T3",
+    "phase": "M4",
+    "phase_name": "LLM 筛选模块",
+    "title": "实现 LLM Screener 服务（缓存 + 阈值）",
+    "description": "实现 src/llm/screener.ts，组合 client、prompt、schema，提供 screen(job, jobIntent) 方法，支持缓存与关键词 fallback。",
+    "depends_on": ["M1-T2", "M4-T2", "M3-T8"],
+    "files_to_create": [
+      "src/llm/screener.ts",
+      "src/intent/job-intent.ts",
+      "src/test/unit/llm/screener.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "同一 encryptJobId 7 天内不再调用 LLM",
+      "输出 ScreenResult 且通过 Zod 校验",
+      "match_score>=阈值且无 red_flags 视为通过",
+      "LLM 失败时可用关键词 fallback"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“LLM JD 筛选设计”与“推荐默认配置”章节。\n任务：实现 src/llm/screener.ts 与 src/intent/job-intent.ts。\n要求：\n1. job-intent.ts：导出 loadJobIntent(): string，从配置文件或环境变量读取自然语言岗位意图。\n2. screener.ts：JobScreener 依赖 llmClient、storage、logger、config。\n3. screen(jobDetail, encryptJobId)：先查 storage.getLLMCache(encryptJobId)，7 天内有效则直接返回；否则调用 buildJDScreenPrompt + llmClient.chat，用 zod schema 安全解析；保存缓存。\n4. 阈值：match_score >= config.MATCH_SCORE_THRESHOLD 且 red_flags.length===0 时 isShortlisted=true。\n5. Fallback：当 LLM 不可用时，使用关键词匹配（jobIntent 关键词在 JD 中出现度）返回简化 ScreenResult。\n6. 单元测试用 MockLLMClient 与 MockStorage 覆盖缓存命中、成功筛选、阈值判定、fallback。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M5-T1",
+    "phase": "M5",
+    "phase_name": "投递流程与并发流水线",
+    "title": "实现打招呼/投递服务（含 Dry-run）",
+    "description": "实现 src/platform/boss/apply.ts，调用 greet API，生成个性化打招呼语，支持 Dry-run 模式与结果记录。",
+    "depends_on": ["M1-T2", "M3-T5", "M3-T9", "M4-T3"],
+    "files_to_create": [
+      "src/platform/boss/apply.ts",
+      "src/test/unit/platform/apply.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "Dry-run 不真正调用 API",
+      "真实模式调用 greetBoss",
+      "使用 suggested_greeting 作为打招呼语",
+      "记录投递结果与截图"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“打招呼 API”与“核心流程”章节。\n任务：实现 src/platform/boss/apply.ts。\n要求：\n1. ApplyService 依赖 apiClient、securityIdResolver、storage、logger、config。\n2. apply(job: NormalizedJob & { screenResult: ScreenResult })：若 config.DRY_RUN 为 true，只记录日志与 storage（status=applied, result=success, 备注 dry-run）并返回；否则调用 securityIdResolver.resolve 获取 securityId，然后 apiClient.greetBoss，附带 screenResult.suggested_greeting。\n3. 投递前后 randomSleep(10s,20s)。\n4. 结果记录到 storage：成功→applied+success；失败→failed+错误信息；截图路径如适用。\n5. 单元测试覆盖 Dry-run、成功、securityId 解析失败、API 失败。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M5-T2",
+    "phase": "M5",
+    "phase_name": "投递流程与并发流水线",
+    "title": "实现 Pipeline 队列定义",
+    "description": "实现 src/pipeline/queues.ts，定义 RawJobQueue、DetailQueue、ShortlistedQueue 及其消息结构。",
+    "depends_on": ["M1-T2", "M4-T3"],
+    "files_to_create": [
+      "src/pipeline/queues.ts",
+      "src/test/unit/pipeline/queues.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "队列消息结构覆盖 BrowserJob、DetailedJob、ScreenedJob",
+      "提供 enqueue/dequeue/close 接口",
+      "使用内存队列或可选 p-queue"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“并发流水线”章节。\n任务：实现 src/pipeline/queues.ts。\n要求：\n1. 定义类型 BrowserJob { rawJob: NormalizedJob; sourceKeyword: string }、DetailedJob { rawJob; detail: JobDetail }、ScreenedJob { rawJob; detail; screenResult }。\n2. 实现三个队列类（或使用 generic Queue<T>），支持 enqueue(item)、dequeue(): Promise<T>、size、close。可用内存数组 + p-queue 控制并发。\n3. 单元测试验证 FIFO 与并发消费。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M5-T3",
+    "phase": "M5",
+    "phase_name": "投递流程与并发流水线",
+    "title": "实现 Browser Producer Worker",
+    "description": "实现 src/pipeline/workers/browser-producer.ts，从搜索模块产生职位并写入 RawJobQueue，做去重与硬过滤。",
+    "depends_on": ["M3-T6", "M5-T2"],
+    "files_to_create": [
+      "src/pipeline/workers/browser-producer.ts",
+      "src/test/unit/pipeline/browser-producer.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "按配置关键词循环搜索",
+      "已处理 encryptJobId 不入队",
+      "黑名单公司与排除关键词被过滤"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“核心流程”与“并发流水线”章节。\n任务：实现 src/pipeline/workers/browser-producer.ts。\n要求：\n1. BrowserProducer 依赖 searchService、storage、rawJobQueue、logger、config。\n2. run(searchConfigs)：对每个搜索配置（城市/关键词/筛选）调用 searchService.fetchAllPages；对每条 NormalizedJob：\n   - 若 storage.hasJob(encryptJobId) 则跳过；\n   - 若 brandName 在黑名单或 jobName 含排除关键词则记录 skip；\n   - 否则 rawJobQueue.enqueue({ rawJob, sourceKeyword })。\n3. 浏览器操作单线程。\n4. 单元测试用 MockSearchService 与 MockStorage。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M5-T4",
+    "phase": "M5",
+    "phase_name": "投递流程与并发流水线",
+    "title": "实现 Detail Fetcher Worker",
+    "description": "实现 src/pipeline/workers/detail-fetcher.ts，并发消费 RawJobQueue，获取职位详情并写入 DetailQueue。",
+    "depends_on": ["M3-T8", "M5-T2"],
+    "files_to_create": [
+      "src/pipeline/workers/detail-fetcher.ts",
+      "src/test/unit/pipeline/detail-fetcher.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "并发度默认 3",
+      "详情获取失败时标记并跳过",
+      "结果写入 DetailQueue"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“并发流水线”章节。\n任务：实现 src/pipeline/workers/detail-fetcher.ts。\n要求：\n1. DetailFetcher 依赖 jobDetailService、rawJobQueue、detailQueue、logger、config。\n2. run(concurrency=3)：启动 p-queue 消费 rawJobQueue，每个任务调用 jobDetailService.getJobDetail(rawJob)；成功后 detailQueue.enqueue({ rawJob, detail })，失败则 storage 记录 failed 并继续。\n3. 支持 graceful shutdown（等待队列清空或超时）。\n4. 单元测试验证并发数、成功/失败路径。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M5-T5",
+    "phase": "M5",
+    "phase_name": "投递流程与并发流水线",
+    "title": "实现 LLM Screener Worker",
+    "description": "实现 src/pipeline/workers/llm-screener.ts，并发消费 DetailQueue，调用 LLM 筛选，将 shortlisted 写入 ShortlistedQueue。",
+    "depends_on": ["M4-T3", "M5-T2"],
+    "files_to_create": [
+      "src/pipeline/workers/llm-screener.ts",
+      "src/test/unit/pipeline/llm-screener.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "并发度默认 5",
+      "低于阈值记录 skip_reason",
+      "高于阈值进入 ShortlistedQueue"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“并发流水线”与“LLM JD 筛选设计”章节。\n任务：实现 src/pipeline/workers/llm-screener.ts。\n要求：\n1. LLMScreenerWorker 依赖 jobScreener、detailQueue、shortlistedQueue、storage、logger、config。\n2. run(concurrency=5)：消费 detailQueue，调用 jobScreener.screen(detail, encryptJobId) 得到 screenResult；若 isShortlisted 则 shortlistedQueue.enqueue({ rawJob, detail, screenResult })，否则 storage 更新为 screened/skipped 并记录 skip_reason。\n3. 单元测试覆盖通过、不通过、缓存命中。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M5-T6",
+    "phase": "M5",
+    "phase_name": "投递流程与并发流水线",
+    "title": "实现 Apply Worker 与限流",
+    "description": "实现 src/pipeline/workers/apply-worker.ts，串行消费 ShortlistedQueue，调用 ApplyService，控制投递频率与日上限。",
+    "depends_on": ["M5-T1", "M5-T5"],
+    "files_to_create": [
+      "src/pipeline/workers/apply-worker.ts",
+      "src/test/unit/pipeline/apply-worker.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "投递并发度默认 1",
+      "达到日上限后停止投递",
+      "每次投递间隔随机 10-20s"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“并发流水线”与“反检测与合规策略”章节。\n任务：实现 src/pipeline/workers/apply-worker.ts。\n要求：\n1. ApplyWorker 依赖 applyService、shortlistedQueue、storage、logger、config。\n2. run(concurrency=1)：串行消费 shortlistedQueue；投递前检查当日已投递数是否 >= config.APPLY_DAILY_LIMIT，达到则停止并 warn。\n3. 每次投递后 randomSleep(10s,20s)。\n4. 记录结果到 storage 与 daily_stats。\n5. 单元测试验证日上限、成功、失败、Dry-run。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M5-T7",
+    "phase": "M5",
+    "phase_name": "投递流程与并发流水线",
+    "title": "实现 Orchestrator 主流程编排",
+    "description": "实现 src/pipeline/orchestrator.ts，组装 producer → fetcher → screener → apply worker，处理中断恢复与全局限流。",
+    "depends_on": ["M5-T3", "M5-T4", "M5-T5", "M5-T6"],
+    "files_to_create": [
+      "src/pipeline/orchestrator.ts",
+      "src/test/integration/pipeline/orchestrator.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "能顺序启动 4 个 worker",
+      "支持 SIGINT 优雅退出",
+      "再次启动时跳过已处理职位",
+      "日上限与频率限制生效"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“核心流程”与“并发流水线”章节。\n任务：实现 src/pipeline/orchestrator.ts。\n要求：\n1. Orchestrator 依赖 browserManager、sessionManager、searchService、jobDetailService、jobScreener、applyService、queues、storage、logger、config。\n2. run()：\n   - 浏览器连接并检查登录态；\n   - 初始化队列；\n   - 启动 producer、detail fetcher、LLM screener、apply worker；\n   - 监听 SIGINT/SIGTERM，调用 gracefulShutdown；\n   - 运行结束后生成日报并导出报告。\n3. 中断恢复：启动时 storage 已有 encryptJobId 的职位被跳过。\n4. 集成测试使用 MockBrowserDriver + MockAPIClient + MockLLMClient + MockStorage，验证完整流程。\n验收标准：npx tsc --noEmit 无错；npm run test:integration 通过。"
+  },
+  {
+    "id": "M6-T1",
+    "phase": "M6",
+    "phase_name": "稳定性、报告与测试",
+    "title": "实现 SQLite 存储与写入队列",
+    "description": "实现 src/storage/store.ts 与 write-queue.ts，使用 better-sqlite3，启用 WAL 模式，序列化并发写入。",
+    "depends_on": ["M1-T2", "M1-T3"],
+    "files_to_create": [
+      "src/storage/store.ts",
+      "src/storage/write-queue.ts",
+      "src/test/unit/storage/store.spec.ts",
+      "src/test/unit/storage/write-queue.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "数据库启用 WAL、business_timeout=5000、synchronous=NORMAL",
+      "实现 IJobStorage 所有方法",
+      "写入队列序列化并发写入",
+      "批量写入使用事务"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“SQLite WAL 模式与并发写入”与“SQLite 数据库设计”章节。\n任务：实现 src/storage/store.ts 与 write-queue.ts。\n要求：\n1. write-queue.ts：SQLiteWriteQueue 使用内部队列 + 单消费者，enqueue(fn) 返回 Promise，fn 内部执行 db 操作；支持 drain() 等待清空。\n2. store.ts：JobStorage 实现 IJobStorage，构造函数打开 dbPath，设置 journal_mode=WAL、synchronous=NORMAL、busy_timeout=5000，创建 jobs/blacklist/daily_stats 表（严格按 schema）。\n3. 实现方法：saveJob、getJobById、hasJob、updateJobStatus、blacklistCompany、isBlacklisted、saveDailyStats、getDailyStats、cacheLLMResult、getLLMCache。\n4. 单元测试使用内存 SQLite（:memory:），覆盖 CRUD、去重、黑名单、缓存 TTL、并发写入。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M6-T2",
+    "phase": "M6",
+    "phase_name": "稳定性、报告与测试",
+    "title": "实现报告导出（Markdown/CSV）",
+    "description": "实现 src/report/exporter.ts，从 SQLite 查询生成 Markdown 与 CSV 报告。",
+    "depends_on": ["M6-T1"],
+    "files_to_create": [
+      "src/report/exporter.ts",
+      "src/test/unit/report/exporter.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "Markdown 包含统计摘要、投递状态表、Top N 职位",
+      "CSV 字段与数据库一致",
+      "导出文件保存到 data/reports/"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“报告导出”章节。\n任务：实现 src/report/exporter.ts。\n要求：\n1. ReportExporter 依赖 storage、logger。\n2. exportMarkdown({ date, topN=20 })：生成包含统计摘要（total_seen/applied/skipped/failed/llm_calls）、投递状态表、Top N 职位详情卡片的 Markdown。\n3. exportCSV({ date })：导出当天所有 jobs 记录为 CSV。\n4. 文件保存到 data/reports/daily-report-{date}.md 与 jobs-{date}.csv。\n5. 单元测试用 MockStorage 验证输出包含关键字段。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M6-T3",
+    "phase": "M6",
+    "phase_name": "稳定性、报告与测试",
+    "title": "实现内存管理与截图清理",
+    "description": "在 browser manager 与全局 runner 中加入内存监控、截图过期清理、浏览器定时重启。",
+    "depends_on": ["M2-T1", "M2-T2", "M6-T1"],
+    "files_to_create": [
+      "src/utils/memory-monitor.ts",
+      "src/utils/screenshot-cleanup.ts",
+      "src/test/unit/utils/memory-monitor.spec.ts"
+    ],
+    "files_to_modify": ["src/browser/manager.ts"],
+    "acceptance": [
+      "定期输出 process.memoryUsage()",
+      "24 小时以上截图自动删除",
+      "浏览器运行超 1 小时自动重启"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“内存管理”与“验证码/反爬检测”章节。\n任务：实现 src/utils/memory-monitor.ts、screenshot-cleanup.ts，并补全 BrowserManager 的定时重启。\n要求：\n1. memory-monitor.ts：startMemoryMonitor(logger, intervalMs=60000) 使用 setInterval 输出 process.memoryUsage，可 stop。\n2. screenshot-cleanup.ts：cleanOldScreenshots(screenshotDir, maxAgeHours=24) 递归删除修改时间超过 maxAgeHours 的 .png。\n3. BrowserManager 中已实现的 restartIntervalMs：在 getPage/getContext 时检查 connectedAt，超时则 disconnect+connect。\n4. 单元测试使用 MockLogger 与临时目录验证清理。\n验收标准：npx tsc --noEmit 无错；npm run test:unit 通过。"
+  },
+  {
+    "id": "M6-T4",
+    "phase": "M6",
+    "phase_name": "稳定性、报告与测试",
+    "title": "实现主 CLI 入口与运行模式",
+    "description": "实现 src/main.ts，解析运行模式（Dry-run/CDP/QR），启动 Orchestrator，处理全局错误与退出。",
+    "depends_on": ["M5-T7", "M6-T2", "M6-T3"],
+    "files_to_create": [
+      "src/main.ts",
+      "src/test/integration/main.spec.ts"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "CLI 默认进入 Dry-run 模式",
+      "异常时保存截图并优雅退出",
+      "运行结束后打印日报路径"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“核心流程”与“推荐默认配置”章节。\n任务：实现 src/main.ts。\n要求：\n1. main() 加载 config，初始化 logger、storage、browserManager、sessionManager、apiClient、searchService、jobDetailService、securityIdResolver、jobScreener、applyService、queues、orchestrator、reportExporter。\n2. 根据配置选择登录模式：CDP 优先，失败可切换 QR。\n3. 全局 try/catch：异常时截图、记录日志、调用 gracefulShutdown。\n4. 运行结束后调用 reportExporter.exportMarkdown/exportCSV，打印报告路径。\n5. 集成测试通过依赖注入使用 Mock 验证主流程。\n验收标准：npx tsc --noEmit 无错；npm run test:integration 通过。"
+  },
+  {
+    "id": "M6-T5",
+    "phase": "M6",
+    "phase_name": "稳定性、报告与测试",
+    "title": "补全单元与集成测试、Fixtures、MSW",
+    "description": "查漏补缺，为所有核心模块编写测试，达到 unit+integration 合并 70% 覆盖率目标。",
+    "depends_on": ["M6-T4"],
+    "files_to_create": [
+      "src/test/integration/platform/api.spec.ts",
+      "src/test/integration/pipeline/orchestrator.spec.ts"
+    ],
+    "files_to_modify": [
+      "vitest.config.ts",
+      "package.json"
+    ],
+    "acceptance": [
+      "npm run test:unit 全部通过",
+      "npm run test:integration 全部通过",
+      "npm run test:coverage 达到 70%"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“测试工程化”章节。\n任务：补全测试覆盖。\n要求：\n1. 为 M2-M5 中尚未覆盖的核心函数补充单元测试。\n2. 新增集成测试：src/test/integration/platform/api.spec.ts 使用 MSW 验证 APIClient；src/test/integration/pipeline/orchestrator.spec.ts 使用全部 Mock 跑通一次完整 Dry-run 流程。\n3. 调整 vitest.config.ts 的 coverage thresholds：lines=70, functions=70, branches=60, statements=70。\n4. package.json 确保 test:coverage 脚本正确。\n验收标准：npm run test:unit 与 test:integration 全部通过；npm run test:coverage 不低于阈值。"
+  },
+  {
+    "id": "M6-T6",
+    "phase": "M6",
+    "phase_name": "稳定性、报告与测试",
+    "title": "编写 README、免责声明与运行手册",
+    "description": "完善 README.md，包含安装配置、使用示例、各脚本说明、免责声明、风险说明、目录结构。",
+    "depends_on": ["M6-T4"],
+    "files_to_create": [],
+    "files_to_modify": ["README.md"],
+    "acceptance": [
+      "README 包含配置说明、运行命令、验证步骤、免责声明",
+      "明确提示仅供个人求职学习、低频率使用"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“风险与应对”与“验证方式”章节。\n任务：完善 README.md。\n要求：\n1. 项目简介、功能特性、技术栈。\n2. 安装与配置步骤（复制 .env.example、安装 Chrome、配置 LLM Key）。\n3. 运行命令：CDP 登录、QR 登录、Dry-run、正式投递、导出报告。\n4. 目录结构说明。\n5. 验证方式（手动验证清单 + 自动测试命令）。\n6. 风险与免责声明：明确仅供个人求职学习使用，遵守平台用户协议，低频率运行，账号受限风险自负。\n验收标准：README 完整、无语法错误、包含免责声明。"
+  },
+  {
+    "id": "M7-T1",
+    "phase": "M7",
+    "phase_name": "集成验收与文档",
+    "title": "端到端验证清单与问题修复",
+    "description": "按照 ZhipinPlan.md 中的手动验证清单逐项验证，记录问题并修复，确保 Dry-run 与单职位投递可跑通。",
+    "depends_on": ["M6-T5", "M6-T6"],
+    "files_to_create": [
+      "docs/validation-checklist.md"
+    ],
+    "files_to_modify": [],
+    "acceptance": [
+      "完成至少 8 项手动验证",
+      "Dry-run 模式可完整跑通一次搜索",
+      "验证码检测能截图暂停"
+    ],
+    "prompt": "请阅读 workspace/ZhipinPlan.md 中“验证方式”章节。\n任务：创建 docs/validation-checklist.md 并按清单执行端到端验证。\n要求：\n1. 清单包含：CDP 连接、二维码登录、登录态刷新、API 字段、多层数据获取、securityId 解析、详情双轨、分类重试、验证码检测、并发流水线、Dry-run、单职位投递、报告导出。\n2. 每条记录：是否通过、截图/日志路径、问题与修复提交。\n3. 至少完成 CDP 连接、API 字段、多层数据获取、Dry-run、验证码检测、报告导出 6 项核心验证。\n4. 将发现的 bug 记录为 issues 或直接修复。\n验收标准：docs/validation-checklist.md 存在且至少 6 项标记为通过；Dry-run 模式无报错跑完一次搜索。"
+  }
+]

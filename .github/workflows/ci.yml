@@ -1,0 +1,16 @@
+name: CI
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npx tsc --noEmit        # 类型检查：必须通过
+      - run: npm run lint            # Lint：必须通过
+      - run: npm test                # 测试：必须通过
+      - run: npm run build           # 构建：必须成功
