@@ -50,3 +50,8 @@ coverage/
 # Misc
 *.tmp
 *.temp
+
+# SQLite journals
+data/*.sqlite-journal
+data/*.sqlite-wal
+data/*.sqlite-shm
