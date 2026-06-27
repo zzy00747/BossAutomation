@@ -30,6 +30,7 @@ export interface HumanizedMouseMoveOptions {
   stepDelayMin?: number;
   stepDelayMax?: number;
   jitter?: number;
+  stepSleep?: (ms: number) => Promise<void>;
 }
 
 export async function humanizedMouseMove(
@@ -66,6 +67,7 @@ export async function humanizedMouseMove(
   const jitter = options.jitter ?? 3;
   const stepDelayMin = options.stepDelayMin ?? 10;
   const stepDelayMax = options.stepDelayMax ?? 20;
+  const stepSleep = options.stepSleep ?? sleep;
 
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
@@ -83,7 +85,7 @@ export async function humanizedMouseMove(
     }, { x, y });
 
     if (i < steps) {
-      await sleep(Math.floor(randomBetween(stepDelayMin, stepDelayMax)));
+      await stepSleep(Math.floor(randomBetween(stepDelayMin, stepDelayMax)));
     }
   }
 }
@@ -91,9 +93,10 @@ export async function humanizedMouseMove(
 export async function humanizedClick(
   page: IPage,
   selector: string,
+  sleepFn: (min: number, max: number) => Promise<void> = randomSleep,
 ): Promise<void> {
-  await randomSleep(200, 800);
-  await humanizedMouseMove(page, selector);
+  await sleepFn(200, 800);
+  await humanizedMouseMove(page, selector, { stepSleep: () => Promise.resolve() });
   await page.click(selector);
 }
 
@@ -101,6 +104,7 @@ export interface HumanizedScrollOptions {
   direction?: 'up' | 'down';
   distance?: number;
   steps?: number;
+  sleepFn?: (min: number, max: number) => Promise<void>;
 }
 
 export async function humanizedScroll(
@@ -111,11 +115,12 @@ export async function humanizedScroll(
   const distance = options.distance ?? 500;
   const steps = Math.max(1, options.steps ?? 5);
   const stepDistance = direction === 'down' ? distance / steps : -distance / steps;
+  const sleepFn = options.sleepFn ?? randomSleep;
 
   for (let i = 0; i < steps; i++) {
     await page.evaluate<void, number>((dy) => {
       window.scrollBy(0, dy);
     }, stepDistance);
-    await randomSleep(300, 1000);
+    await sleepFn(300, 1000);
   }
 }

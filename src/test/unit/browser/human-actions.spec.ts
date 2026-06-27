@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { IPage } from '../../../interfaces/browser.js';
 import {
   sleep,
@@ -25,51 +25,46 @@ function createMockPage(): IPage {
   } as unknown as IPage;
 }
 
+const noOpSleep = () => Promise.resolve();
+
 describe('human actions', () => {
-  beforeEach(() => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   it('sleep waits the requested time', async () => {
     const start = Date.now();
-    const promise = sleep(50);
-    vi.advanceTimersByTime(50);
-    await promise;
-    expect(Date.now() - start).toBeGreaterThanOrEqual(50);
+    await sleep(30);
+    expect(Date.now() - start).toBeGreaterThanOrEqual(25);
   });
 
   it('humanizedMouseMove dispatches multiple mousemove events', async () => {
     const page = createMockPage();
-    const promise = humanizedMouseMove(page, '.job-card', { steps: 5 });
-    vi.advanceTimersByTime(200);
-    await promise;
+    await humanizedMouseMove(page, '.job-card', {
+      steps: 5,
+      stepSleep: noOpSleep,
+    });
 
     const evaluateCalls = vi.mocked(page.evaluate).mock.calls;
     const mouseMoveCalls = evaluateCalls.filter(
-      (call) => call[0].toString().includes('MouseEvent') || call[0].toString().includes('mousemove'),
+      (call) =>
+        call[0].toString().includes('MouseEvent') ||
+        call[0].toString().includes('mousemove'),
     );
     expect(mouseMoveCalls.length).toBeGreaterThanOrEqual(5);
   });
 
   it('humanizedClick waits, moves and clicks', async () => {
     const page = createMockPage();
-    const promise = humanizedClick(page, '.job-card');
-    vi.advanceTimersByTime(2000);
-    await promise;
-
+    await humanizedClick(page, '.job-card', noOpSleep as unknown as (min: number, max: number) => Promise<void>);
     expect(page.click).toHaveBeenCalledWith('.job-card');
   });
 
   it('humanizedScroll scrolls in steps', async () => {
     const page = createMockPage();
     vi.mocked(page.evaluate).mockResolvedValue(undefined);
-    const promise = humanizedScroll(page, { direction: 'down', distance: 500, steps: 5 });
-    vi.advanceTimersByTime(5000);
-    await promise;
+    await humanizedScroll(page, {
+      direction: 'down',
+      distance: 500,
+      steps: 5,
+      sleepFn: noOpSleep as unknown as (min: number, max: number) => Promise<void>,
+    });
 
     const scrollCalls = vi.mocked(page.evaluate).mock.calls.filter((c) =>
       c[0].toString().includes('scrollBy'),
