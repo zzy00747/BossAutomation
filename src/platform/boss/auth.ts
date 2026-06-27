@@ -43,6 +43,19 @@ export class BossAuthService {
     return loggedIn;
   }
 
+  async reconnectCDP(): Promise<boolean> {
+    this.logger.info('尝试重新连接 CDP 并检查登录态');
+    try {
+      await this.browserManager.disconnect();
+      await this.browserManager.connect();
+      const page = await this.browserManager.getPage();
+      return await this.isLoggedIn(page);
+    } catch (err) {
+      this.logger.warn({ err }, 'CDP 重连失败');
+      return false;
+    }
+  }
+
   async loginViaCDP(): Promise<boolean> {
     this.logger.info('通过 CDP 连接浏览器并检查登录态');
     await this.browserManager.connect();
