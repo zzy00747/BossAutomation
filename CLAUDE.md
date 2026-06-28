@@ -13,7 +13,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `ReferenceProject/mcp-bosszp/` —— 参考实现：求职者端 FastMCP 服务（登录、推荐职位、打招呼）。
 - `ReferenceProject/boss-zhipin-mcp/` —— 参考实现：招聘者端 FastMCP 服务（候选人搜索、评分、报告导出）。
 
-真正的 TypeScript 项目尚未创建，其预期架构和命令见 `workspace/ZhipinPlan.md` 与 `workspace/dev-plans/`。
+真正的 TypeScript 项目已创建，入口为 `src/main.ts`，完整命令见下文“TypeScript Agent 命令”。
 
 ## 会话工作流
 
@@ -137,12 +137,17 @@ git commit -m "[docs] 记录验证码选择器兼容性问题"
 
 | 模块 | 文件范围 | 职责 | 依赖 |
 |------|---------|------|------|
-| browser | `src/browser/` | 浏览器生命周期、反检测、人类行为模拟 | 无 |
+| browser | `src/browser/` | 浏览器生命周期、反检测、人类行为模拟、页面池 | 无 |
 | platform/boss | `src/platform/boss/` | Boss 直聘特定 API 和 DOM 逻辑 | browser |
 | llm | `src/llm/` | LLM 调用、筛选逻辑 | 无 |
 | storage | `src/storage/` | SQLite 操作 | 无 |
 | pipeline | `src/pipeline/` | 编排所有模块 | 以上所有 |
-| report | `src/report/` | 报告导出 | storage |
+| report | `src/report/` | 报告导出（Markdown/CSV） | storage |
+| utils | `src/utils/` | 内存监控、截图清理、分类重试 | storage / pipeline |
+| interfaces | `src/interfaces/` | 抽象接口定义 | 无 |
+| intent | `src/intent/` | 岗位意图加载 | 无 |
+| config | `src/config.ts` | 配置校验与加载 | 无 |
+| main | `src/main.ts` | CLI 入口与运行时装配 | 所有模块 |
 
 - 修改一个模块时，检查是否有其他模块依赖它。
 - 如果修改了接口/类型，必须同步更新 `src/types.ts`。
@@ -153,11 +158,12 @@ git commit -m "[docs] 记录验证码选择器兼容性问题"
 
 - 每个模块的核心函数必须有单元测试。
 - 使用 mock 隔离外部依赖（浏览器、网络、LLM）。
-- 测试文件命名：`xxx.test.ts`，放在 `tests/` 目录下。
+- 测试文件命名：`xxx.spec.ts`，放在 `src/test/` 目录下（单元测试在 `src/test/unit/`，集成测试在 `src/test/integration/`）。
+- 集成测试使用 MSW handler 模拟真实网络响应，fixture 放在 `src/test/fixtures/`。
 
 #### 集成测试
 
-- 使用 HAR 文件或 MSW handler 模拟真实网络响应，fixture 放在 `tests/fixtures/`。
+- 使用 HAR 文件或 MSW handler 模拟真实网络响应，fixture 放在 `src/test/fixtures/`。
 - 不要依赖真实的 Boss 直聘网站。
 
 #### 运行测试
@@ -165,6 +171,7 @@ git commit -m "[docs] 记录验证码选择器兼容性问题"
 - `npm test` —— 运行所有测试
 - `npm run test:unit` —— 只运行单元测试
 - `npm run test:integration` —— 只运行集成测试
+- `npm run test:coverage` —— 运行测试并检查覆盖率（lines/functions/statements ≥ 70%，branches ≥ 60%）
 
 ### Skill 使用规则
 
@@ -235,19 +242,22 @@ playwright install chromium
 python server.py
 ```
 
-### 计划中的 TypeScript Agent（尚未实现）
+### TypeScript Agent 命令（已实现）
 
-`workspace/ZhipinPlan.md` 中的项目实现后，预期命令如下，具体以生成的 `package.json` 为准：
+`src/main.ts` 为 CLI 入口，`package.json` 已配置：
 
 ```bash
 npm install
-npm run test          # vitest
+npm run test          # vitest 全部测试
 npm run test:unit
 npm run test:integration
 npm run test:coverage
-npm run build         # tsc 编译
-npm start             # 运行 CLI 入口
+npm run build         # tsc 编译到 dist/
+npm start             # 运行 CLI 入口（需先设置 DRY_RUN=false）
+npm run dev           # tsx 直接运行 src/main.ts
 ```
+
+启动前确保 Chrome 已开启 CDP（`--remote-debugging-port=9222`）并登录 Boss 直聘，或配置二维码登录兜底。详见 `README.md`。
 
 ## 高层架构
 
@@ -275,16 +285,19 @@ npm start             # 运行 CLI 入口
 - 通过 `search_profile.yaml` 驱动的过滤与评分。
 - Markdown 报告导出。
 
-### 计划中的 TypeScript Agent（`workspace/ZhipinPlan.md`）
+### TypeScript Agent（已实现）
 
-计划采用接口驱动的分层架构：
+项目采用接口驱动的分层架构，已实现并达到测试覆盖：
 
 - **Interfaces**（`src/interfaces/*.ts`）：抽象 `IBrowserDriver`、`IPage`、`IBossAPIClient`、`ILLMClient`、`IJobStorage`，便于 mock 和测试注入。
-- **Browser 层**（`src/browser/`）：CDP 连接、页面池、人类行为模拟、反检测补丁、验证码检测。
+- **Browser 层**（`src/browser/`）：CDP 连接、页面池、人类行为模拟、反检测补丁、验证码检测、定时重启。
 - **Platform 层**（`src/platform/boss/`）：Boss 直聘专属逻辑，包括 URL、选择器、页面状态抽取、职位规范化、Cookie/请求头构造、API 客户端、搜索翻页、详情获取、securityId 解析、错误分类、登录/会话管理。
 - **LLM 层**（`src/llm/`）：兼容 OpenAI/Anthropic，使用 Zod 校验的 Prompt 进行 JD 筛选。
 - **Storage 层**（`src/storage/`）：SQLite + WAL + 写入队列，用于去重、状态流转、LLM 缓存、日报统计。
 - **Pipeline 层**（`src/pipeline/`）：生产者-消费者流水线：`BrowserProducer → DetailFetcher → LLMScreener → ApplyWorker`，由 `Orchestrator` 编排。
+- **Report 层**（`src/report/`）：从 SQLite 生成 Markdown/CSV 报告。
+- **Utils 层**（`src/utils/`）：内存监控、截图过期清理、分类重试。
+- **CLI 入口**（`src/main.ts`）：装配所有模块，处理全局错误、退出与报告导出。
 
 关键设计决策：
 
@@ -316,14 +329,14 @@ npm start             # 运行 CLI 入口
 
 ### `workspace/ZhipinPlan.md` 与 `workspace/dev-plans/`
 
-- `ZhipinPlan.md` 是 TypeScript Agent 实现的权威依据。
+- `ZhipinPlan.md` 是 TypeScript Agent 实现的权威依据，当前已实现到 M6。
 - `dev-plans/` 将其拆成 7 个阶段、40 个可执行任务；`tasks.json` 中每个任务包含依赖、交付物、验收标准和可直接复制给子 Agent 的 prompt。
-- 开始实现 TypeScript 项目前，先阅读 `ZhipinPlan.md` 和对应的 `phase-M*.md`。
+- 继续开发前，先阅读 `workspace/dev-plans/README.md` 与 `tasks.json`，确认当前进度与下一步任务。
 
 ## 其他说明
 
 - 本仓库没有 Cursor 规则（`.cursorrules` 或 `.cursor/rules/`）或 GitHub Copilot 指令（`.github/copilot-instructions.md`）。
-- 不要把参考 Python 项目当作最终产品；它们仅用于提供 API 端点、登录流程细节和工程模式，供计划中的 TypeScript Agent 参考。
+- 不要把参考 Python 项目当作最终产品；它们仅用于提供 API 端点、登录流程细节和工程模式，供 TypeScript Agent 参考。
 - 编辑 `ReferenceProject/` 下的文件时，保持改动隔离，确保它们继续可用作参考。
 - `ReferenceProject/` 下的两个项目以 **Git 子模块** 形式引入。首次 clone 后需要执行 `git submodule update --init --recursive` 才能获取其内容。
 - 本仓库统一使用 **LF 换行**。Windows 开发环境请设置 `git config core.autocrlf false`，避免 CRLF 转换干扰。
