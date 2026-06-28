@@ -47,4 +47,22 @@ describe('BossQRLoginService', () => {
     expect(url).toContain('pk=header-login');
     expect(url).toContain('fp=');
   });
+
+  it('getDispatcherCookie 在 Set-Cookie 为空时仍从 context 读取 HttpOnly cookie', async () => {
+    // dispatcher 响应不带 Set-Cookie（手工 cookieJar 为空），但浏览器 context 已有登录态 Cookie
+    fetchSpy.mockResolvedValue(new Response('', { status: 302 }));
+
+    const context = new MockBrowserContext();
+    vi.spyOn(context, 'cookies').mockResolvedValue([
+      { name: 'wt2', value: 'HttpOnly-token' },
+      { name: '__zp_stoken__', value: 'stoken-from-context' },
+    ]);
+
+    const service = new BossQRLoginService({ page: new MockPage(), context });
+    const cookies = await service.getDispatcherCookie('qr-123');
+
+    expect(cookies).toContain('wt2=HttpOnly-token');
+    expect(cookies).toContain('__zp_stoken__=stoken-from-context');
+    expect(cookies.length).toBeGreaterThan(0);
+  });
 });
