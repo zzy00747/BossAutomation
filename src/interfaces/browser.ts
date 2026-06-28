@@ -18,7 +18,7 @@ export interface IPage {
     handler?: (route: unknown, request: unknown) => void | Promise<void>,
   ): Promise<void>;
   evaluate<T = unknown, Arg = unknown>(
-    pageFunction: (arg: Arg) => T,
+    pageFunction: string | ((arg: Arg) => T),
     arg?: Arg,
   ): Promise<T>;
   click(selector: string, options?: Record<string, unknown>): Promise<void>;

@@ -28,9 +28,10 @@ export function getRecommendJobsUrl(params: RecommendUrlParams = {}): string {
   return url.toString();
 }
 
-export function getJobDetailApiUrl(encryptJobId: string): string {
+export function getJobDetailApiUrl(encryptJobId: string, lid?: string): string {
   const url = new URL(JOB_DETAIL_API_URL);
   url.searchParams.set('encryptJobId', encryptJobId);
+  if (lid) url.searchParams.set('lid', lid);
   url.searchParams.set('_', String(Date.now()));
   return url.toString();
 }

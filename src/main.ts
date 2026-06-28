@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { getConfig, type Config } from './config.js';
 import { createLogger } from './logger.js';
 import { JobStorage } from './storage/store.js';
@@ -270,10 +271,12 @@ function toLocalDateKey(date: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-// 直接执行时调用 main（ts-node / node --import）
+// 直接执行时调用 main（tsx / node dist/main.js）
 const isDirectEntry = (() => {
   try {
-    return process.argv[1] && path.resolve(process.argv[1]) === path.resolve(__filename);
+    const entry = process.argv[1];
+    if (!entry) return false;
+    return import.meta.url === pathToFileURL(path.resolve(entry)).href;
   } catch {
     return false;
   }

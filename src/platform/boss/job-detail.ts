@@ -85,14 +85,15 @@ export class JobDetailService {
     try {
       page = await this.pagePool.acquire();
       await page.goto(getJobDetailPageUrl(job.encryptJobId), { waitUntil: 'domcontentloaded' });
-      return await page.evaluate<HtmlDetail>(() => {
-        const text = (sel: string): string | undefined => {
+      // 使用字符串函数体避免 tsx 转译引入 __name 等辅助函数在页面上下文缺失。
+      return await page.evaluate<HtmlDetail>(`(() => {
+        const text = (sel) => {
           const el = document.querySelector(sel);
           return el?.textContent?.trim() || undefined;
         };
         const descEl = document.querySelector('.job-sec-text, .job-detail .job-sec-text');
         return {
-          jobName: text('.job-banner .name h1') ?? text('.name .job-title'),
+          jobName: text('.job-banner .name h1') || text('.name .job-title'),
           salary: text('.job-banner .salary'),
           postDescription: descEl?.textContent?.trim() || undefined,
           companyDescription: text('.company-info .company-desc'),
@@ -102,7 +103,7 @@ export class JobDetailService {
           brandScaleName: text('.company-text .company-scale'),
           industry: text('.company-text .industry'),
         };
-      });
+      })()`);
     } catch (err) {
       this.logger.warn({ err, encryptJobId: job.encryptJobId }, 'HTML 详情获取失败');
       return null;

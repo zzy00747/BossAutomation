@@ -109,14 +109,22 @@ export class SessionManager {
   }
 
   async refreshSession(): Promise<boolean> {
-    this.logger.info('尝试 CDP 重连刷新登录态');
-    if (await this.authService.reconnectCDP()) {
-      return true;
+    // 优先尝试轻量刷新页面，避免在流水线运行时断开整个浏览器上下文
+    try {
+      const url = await this.page.url();
+      if (url) {
+        this.logger.info('尝试刷新当前页面');
+        await this.page.goto(LOGIN_PAGE_URL, { waitUntil: 'networkidle' });
+        if (await this.checkLoginByDOM()) {
+          return true;
+        }
+      }
+    } catch {
+      this.logger.warn('当前页面已失效，尝试 CDP 重连');
     }
 
-    this.logger.info('尝试刷新当前页面');
-    await this.page.goto(LOGIN_PAGE_URL, { waitUntil: 'networkidle' });
-    if (await this.checkLoginByDOM()) {
+    this.logger.info('尝试 CDP 重连刷新登录态');
+    if (await this.authService.reconnectCDP()) {
       return true;
     }
 

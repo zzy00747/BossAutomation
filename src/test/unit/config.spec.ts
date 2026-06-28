@@ -21,7 +21,7 @@ function setEnv(partial: Record<string, string>): void {
 describe('config loading', () => {
   beforeEach(() => {
     resetConfig();
-    // Clear env keys that may affect tests
+    // Clear env keys that may affect tests；显式置空防止 dotenv 从 .env 重新加载覆盖
     const keysToClear = [
       'DRY_RUN',
       'CDP_URL',
@@ -37,6 +37,8 @@ describe('config loading', () => {
     for (const key of keysToClear) {
       delete process.env[key];
     }
+    process.env.OPENAI_API_KEY = '';
+    process.env.ANTHROPIC_API_KEY = '';
   });
 
   it('uses recommended defaults', () => {
@@ -85,13 +87,13 @@ describe('config loading', () => {
   });
 
   it('throws when openai key is missing', () => {
-    delete process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = '';
     setEnv({ LLM_PROVIDER: 'openai' });
     expect(() => getConfig()).toThrow(/OPENAI_API_KEY/);
   });
 
   it('throws when anthropic key is missing', () => {
-    delete process.env.ANTHROPIC_API_KEY;
+    process.env.ANTHROPIC_API_KEY = '';
     setEnv({ LLM_PROVIDER: 'anthropic' });
     expect(() => getConfig()).toThrow(/ANTHROPIC_API_KEY/);
   });

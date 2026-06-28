@@ -107,7 +107,7 @@ export class BossAPIClient implements IBossAPIClient {
   }
 
   async getJobDetail(job: NormalizedJob): Promise<JobDetail> {
-    const url = getJobDetailApiUrl(job.encryptJobId);
+    const url = getJobDetailApiUrl(job.encryptJobId, job.lid);
     const headers = await this.requestBuilder.buildHeaders({
       referer: `https://www.zhipin.com/job_detail/${job.encryptJobId}.html`,
     });
