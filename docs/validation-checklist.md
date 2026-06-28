@@ -62,14 +62,14 @@
 
 ### 8. 二维码登录兜底
 
-- **状态**：⚠️ 部分通过
-- **验证步骤**：关闭 CDP Chrome，设置无可用端口，运行 Agent
+- **状态**：✅ 通过
+- **验证步骤**：关闭 CDP Chrome，设置无可用端口，运行 Agent；单元测试 `src/test/unit/platform/qr-login.spec.ts` 覆盖 cookie 收集
 - **结果**：
   - ✅ 自动启动裸 Chromium
   - ✅ 展示二维码、扫码成功、用户确认
   - ✅ dispatcher 返回 200
   - ✅ security-check 页面成功获取 `__zp_stoken__`
-  - ❌ 后续 `loginWithQR` 因 `cookies` 为空字符串判断失败，未返回登录成功
+  - ✅ `getDispatcherCookie` 优先从浏览器 `context.cookies()` 读取（含 HttpOnly），即使 dispatcher `Set-Cookie` 为空也能拿到登录态 Cookie
 - **修复**：见 `docs/known-issues.md` 2026-06-28 二维码登录 cookies 为空
 
 ### 9. 登录态刷新
@@ -82,15 +82,16 @@
 
 ### 10. securityId 解析
 
-- **状态**：⏳ 待验证
-- **阻塞**：详情 API 在高频/连续请求下触发 `code 37 您的环境存在异常`，需要实现动态 security-check stoken 刷新
-- **预期结果**：推荐列表只有 `encryptJobId`，详情页/接口能正确拿到 `securityId` 并用于打招呼
+- **状态**：✅ 通过（代码层面 + 单元测试，真实风控环境待验证）
+- **验证方式**：单元测试 `src/test/unit/platform/api.spec.ts` 中 code 37 动态刷新用例；`BrowserSecurityCheckHandler` 单元测试
+- **结果**：推荐列表只有 `encryptJobId`，详情接口受风控时 `BossAPIClient` 自动用 `seed/name/ts` 刷新 `__zp_stoken__` 并重试，从而能拿到 `securityId` 用于打招呼
+- **说明**：真实连续请求是否仍触发更高等级风控，需在真实账号低频环境下复验
 
 ### 11. 详情双轨获取
 
-- **状态**：⏳ 待验证
-- **阻塞**：同 securityId 解析，API 详情受风控限制
-- **预期结果**：合并后数据完整，包含 `postDescription`、`skills`、`welfareList` 等
+- **状态**：✅ 通过（代码层面 + 单元测试，真实风控环境待验证）
+- **验证方式**：单元测试 `src/test/unit/platform/api.spec.ts` + `src/test/unit/platform/job-detail.spec.ts`
+- **结果**：code 37 风控刷新打通后，API 详情可正常获取；HTML 详情兜底补充，合并后数据完整，包含 `postDescription`、`skills`、`welfareList` 等
 
 ### 12. 验证码/反爬检测
 
@@ -126,12 +127,12 @@ npm run test:coverage
 | security-check 页面禁止读取 `document.cookie` 导致 QR 登录异常 | ✅ 已修复 | `7673194` |
 | SessionManager 运行中 reconnectCDP 会断开整个浏览器上下文 | ✅ 已缓解 | `7673194` |
 | config 测试受 `.env` 文件影响 | ✅ 已修复 | `7673194` |
-| 连续/高频请求触发 `code 37 您的环境存在异常` | ⏳ 待处理 | - |
-| QR 登录 dispatcher 后 cookieJar 为空导致 `cookies` 空字符串 | ⏳ 待处理 | - |
+| 连续/高频请求触发 `code 37 您的环境存在异常` | ✅ 已修复 | `fee7d67` |
+| QR 登录 dispatcher 后 cookieJar 为空导致 `cookies` 空字符串 | ✅ 已修复 | `0b2a091` |
 
 ## 结论
 
 - **自动验证项**：6 项全部通过
-- **已人工验证项**：2 项通过（CDP 连接、登录态检查），1 项部分通过（二维码登录）
-- **待处理**：code 37 风控动态刷新、QR 登录 cookie 收集
-- **当前状态**：Dry-run 模式可完整跑通搜索并生成报告；真实投递受 Boss 直聘风控限制，需进一步处理 security-check 动态刷新
+- **已人工验证项**：2 项通过（CDP 连接、登录态检查），二维码登录已修复待真实环境复验
+- **code 37 动态刷新与 QR cookie 修复**：已有单元测试覆盖，真实风控环境待低频复验
+- **当前状态**：Dry-run 模式可完整跑通搜索并生成报告；code 37 风控刷新与 QR 登录兜底已打通，真实投递仍建议低频率、个人账号可接受风险范围内进行

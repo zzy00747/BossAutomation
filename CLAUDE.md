@@ -200,19 +200,21 @@ git commit -m "[docs] 记录验证码选择器兼容性问题"
 2. **API 字段名不一致。** 同一字段在不同接口中可能叫 `jobId`/`encryptId`/`id`，翻页可能是 `page`、`cursor` 或 `lastId`，务必以实际响应为准并查阅 `docs/api-field-mapping.md`。
 3. **直接 API 请求必须带 `Referer`。** 如果请求头缺少 `Referer: https://www.zhipin.com/`，容易被风控返回 403。
 4. **`__zp_stoken__` 可能是 HttpOnly。** 从 `document.cookie` 中可能读不到，需要用 Playwright 的 `context.cookies()` API 获取。
+5. **`code 37` 风控必须用响应里的 `seed/name/ts` 动态刷新 stoken。** `BossAPIClient` 检测到 `code === 37` 时，调用注入的 `SecurityCheckHandler` 用响应 `zpData.seed/name/ts` 构造 `security-check.html` URL 刷新 `__zp_stoken__`，刷新成功后重试一次；不能用旧 seed 复用。刷新逻辑详见 `docs/known-issues.md`。
 
 #### Playwright 相关
-5. **`page.route()` 默认可能漏掉 `fetch` 请求。** 部分请求通过 `fetch()` 发起，建议显式匹配 `**/*`，必要时用 `page.evaluate()` 注入拦截器。
-6. **有头模式下的窗口焦点。** Windows 上有头模式如果窗口最小化，某些 `waitForSelector` 可能超时，建议保持窗口可见。
-7. **CDP 端口冲突。** 如果 Chrome 已经在运行但没有带 `--remote-debugging-port`，需要先关闭再重新启动，否则 session 数据目录会被锁定。
-8. **`localhost:9222` 在 Windows 下可能解析为 ::1。** Playwright 连接 CDP 时若使用 `http://localhost:9222`，可能解析到 IPv6，而 Chrome 默认监听 IPv4，导致 `ECONNREFUSED`。配置与启动命令都建议使用 `http://127.0.0.1:9222` 并加 `--remote-debugging-address=127.0.0.1`。
+6. **`page.route()` 默认可能漏掉 `fetch` 请求。** 部分请求通过 `fetch()` 发起，建议显式匹配 `**/*`，必要时用 `page.evaluate()` 注入拦截器。
+7. **有头模式下的窗口焦点。** Windows 上有头模式如果窗口最小化，某些 `waitForSelector` 可能超时，建议保持窗口可见。
+8. **CDP 端口冲突。** 如果 Chrome 已经在运行但没有带 `--remote-debugging-port`，需要先关闭再重新启动，否则 session 数据目录会被锁定。
+9. **`localhost:9222` 在 Windows 下可能解析为 ::1。** Playwright 连接 CDP 时若使用 `http://localhost:9222`，可能解析到 IPv6，而 Chrome 默认监听 IPv4，导致 `ECONNREFUSED`。配置与启动命令都建议使用 `http://127.0.0.1:9222` 并加 `--remote-debugging-address=127.0.0.1`。
+10. **`page.evaluate` 在 tsx 下避免复杂 TS 函数。** tsx/esbuild 转译箭头函数可能注入 `__name` 辅助函数，浏览器页面上下文没有该函数会抛 `ReferenceError`；对页面上下文执行的代码用字符串函数体或独立 JS。
 
 #### SQLite 相关
-8. **并发写入导致 `SQLITE_BUSY`。** 默认 `journal_mode` 是 delete，必须改为 WAL 模式（`PRAGMA journal_mode=WAL`），且所有写入通过队列序列化。
-9. **JSON 字段查询语法。** SQLite 不支持 `->` 操作符，需用 `json_extract(col, '$.key')`。
+11. **并发写入导致 `SQLITE_BUSY`。** 默认 `journal_mode` 是 delete，必须改为 WAL 模式（`PRAGMA journal_mode=WAL`），且所有写入通过队列序列化。
+12. **JSON 字段查询语法。** SQLite 不支持 `->` 操作符，需用 `json_extract(col, '$.key')`。
 
 #### LLM 相关
-10. **LLM JSON 输出不稳定。** 必须用 Zod 校验 + 重试机制，且 Prompt 中至少提供 2 个示例。
+13. **LLM JSON 输出不稳定。** 必须用 Zod 校验 + 重试机制，且 Prompt 中至少提供 2 个示例。Zod 避免对两个含 `.transform` 的对象用 `z.union`（歧义解析失败），改用 `z.preprocess` 统一键名后再校验单一 schema。
 
 ### 技术栈约定
 
