@@ -100,4 +100,36 @@ describe('BrowserManager', () => {
     await manager.disconnect();
     expect(kill).toHaveBeenCalledWith('SIGTERM');
   });
+
+  it('restartIntervalMs 超时后重新连接', async () => {
+    fetchSpy.mockResolvedValue({ ok: true });
+    const manager = new BrowserManager({
+      cdpUrl: 'http://localhost:9222',
+      restartIntervalMs: 1,
+    });
+    await manager.connect();
+    const firstConnectedAt = manager['connectedAt'];
+
+    // 等待超过 restartIntervalMs，触发重连
+    await new Promise((r) => setTimeout(r, 5));
+    await manager.getPage();
+
+    expect(manager['connectedAt']).toBeGreaterThan(firstConnectedAt);
+    expect(vi.mocked(chromium.connectOverCDP)).toHaveBeenCalledTimes(2);
+  });
+
+  it('未超时不重连', async () => {
+    fetchSpy.mockResolvedValue({ ok: true });
+    const manager = new BrowserManager({
+      cdpUrl: 'http://localhost:9222',
+      restartIntervalMs: 60 * 60 * 1000,
+    });
+    await manager.connect();
+    const firstConnectedAt = manager['connectedAt'];
+
+    await manager.getPage();
+
+    expect(manager['connectedAt']).toBe(firstConnectedAt);
+    expect(vi.mocked(chromium.connectOverCDP)).toHaveBeenCalledTimes(1);
+  });
 });
