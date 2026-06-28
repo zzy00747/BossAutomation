@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { ScreenResultSchema, parseScreenResult } from '../../../llm/schema.js';
+import {
+  ScreenResultSchema,
+  ScreenResultInputSchema,
+  parseScreenResult,
+} from '../../../llm/schema.js';
 import { buildJDScreenPrompt } from '../../../llm/prompts/jd-screen.js';
 import { fixtureJobDetail } from '../../fixtures/job-detail.js';
 
@@ -21,7 +25,7 @@ describe('ScreenResultSchema', () => {
   });
 
   it('解析合法 snake_case 输入并归一化为 camelCase', () => {
-    const result = ScreenResultSchema.parse({
+    const result = ScreenResultInputSchema.parse({
       match_score: 90,
       salary_match: true,
       location_match: false,

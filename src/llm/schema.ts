@@ -37,45 +37,56 @@ const stringArrayField = z
       .filter(Boolean);
   });
 
-const RawScreenResultSchema = z.object({
-  matchScore: scoreField,
-  salaryMatch: booleanField,
-  locationMatch: booleanField,
-  skillsMatch: scoreField,
-  redFlags: stringArrayField,
-  reason: z.string(),
-  suggestedGreeting: z.string(),
-});
+const SNAKE_TO_CAMEL: Record<string, string> = {
+  match_score: 'matchScore',
+  salary_match: 'salaryMatch',
+  location_match: 'locationMatch',
+  skills_match: 'skillsMatch',
+  red_flags: 'redFlags',
+  suggested_greeting: 'suggestedGreeting',
+};
 
-const snakeKeySchema = z.object({
-  match_score: scoreField,
-  salary_match: booleanField,
-  location_match: booleanField,
-  skills_match: scoreField,
-  red_flags: stringArrayField,
-  reason: z.string(),
-  suggested_greeting: z.string(),
-});
+function normalizeKeys(input: unknown): unknown {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    return input;
+  }
+  const obj = input as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    out[SNAKE_TO_CAMEL[key] ?? key] = value;
+  }
+  return out;
+}
 
 export const ScreenResultSchema = z
-  .union([RawScreenResultSchema, snakeKeySchema])
-  .transform((data): ScreenResult => {
-    if ('match_score' in data) {
-      return {
-        matchScore: data.match_score,
-        salaryMatch: data.salary_match,
-        locationMatch: data.location_match,
-        skillsMatch: data.skills_match,
-        redFlags: data.red_flags,
-        reason: data.reason,
-        suggestedGreeting: data.suggested_greeting,
-      };
-    }
-    return data;
-  });
+  .object({
+    matchScore: scoreField,
+    salaryMatch: booleanField,
+    locationMatch: booleanField,
+    skillsMatch: scoreField,
+    redFlags: stringArrayField,
+    reason: z.string(),
+    suggestedGreeting: z.string(),
+  })
+  .transform((data): ScreenResult => data);
+
+export const ScreenResultInputSchema = z.preprocess(normalizeKeys, ScreenResultSchema);
 
 export function parseScreenResult(raw: unknown): ScreenResult {
-  const result = ScreenResultSchema.safeParse(raw);
+  let input: unknown = raw;
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      throw new Error('LLM 筛选输出为空');
+    }
+    try {
+      input = JSON.parse(trimmed);
+    } catch {
+      throw new Error(`LLM 筛选输出不是合法 JSON: ${trimmed.slice(0, 120)}`);
+    }
+  }
+
+  const result = ScreenResultInputSchema.safeParse(input);
   if (!result.success) {
     const issues = result.error.issues
       .map((i) => `[${i.path.join('.')}] ${i.message}`)
