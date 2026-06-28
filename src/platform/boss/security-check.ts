@@ -61,20 +61,12 @@ export async function getStokenFromSecurityCheck(
       await new Promise((resolve) => setTimeout(resolve, postLoadDelayMs));
     }
 
-    const jsCookies = await page.evaluate<string, void>(() => document.cookie);
+    // security-check 页面可能禁止读取 document.cookie，直接从 context 读取
     const contextCookies = await context.cookies('https://www.zhipin.com');
-
-    const allCookies = [
-      ...jsCookies.split('; '),
-      ...contextCookies.map((c) => `${c.name}=${c.value}`),
-    ];
-
-    for (const pair of allCookies) {
-      if (pair.startsWith('__zp_stoken__=')) {
-        const value = pair.split('=')[1];
-        logger.info('成功获取 __zp_stoken__');
-        return value;
-      }
+    const stokenCookie = contextCookies.find((c) => c.name === '__zp_stoken__');
+    if (stokenCookie) {
+      logger.info('成功获取 __zp_stoken__');
+      return stokenCookie.value;
     }
 
     logger.warn('未从 security-check 页面获取到 __zp_stoken__');

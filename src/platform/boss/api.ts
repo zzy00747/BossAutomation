@@ -84,7 +84,7 @@ export class BossAPIClient implements IBossAPIClient {
   async getRecommendJobs(params: JobSearchParams): Promise<JobListResponse> {
     const url = getRecommendJobsUrl(params);
     const headers = await this.requestBuilder.buildHeaders({
-      referer: 'https://www.zhipin.com/web/recommend',
+      referer: 'https://www.zhipin.com/web/geek/job',
     });
 
     const res = await this.fetchImpl(url, { headers, method: 'GET' });

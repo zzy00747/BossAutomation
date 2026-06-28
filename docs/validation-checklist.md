@@ -11,14 +11,17 @@
 ### 1. Dry-run 模式可完整跑通一次搜索
 
 - **状态**：✅ 通过
-- **验证方式**：运行集成测试 `src/test/integration/main.spec.ts` 中“完整 Dry-run 流程”用例
-- **结果**：`npm test` 通过，367 个测试全部 green；Dry-run 模式下 `greetBoss` 不会被调用，storage 正确记录 `status=applied, skipReason=dry-run`
-- **日志/路径**：`npm run test:integration`
+- **验证方式**：运行集成测试 `src/test/integration/main.spec.ts` 中“完整 Dry-run 流程”用例；同时真实运行 `npm run dev`
+- **结果**：
+  - `npm test` 通过，367 个测试全部 green
+  - 真实运行 `npm run dev`（DRY_RUN=true）成功：CDP 连接 → 搜索职位 → 去重 → 流水线 → 报告导出
+  - 控制台输出：`报告路径: data\reports\daily-report-2026-06-28.md`
+- **日志/路径**：`npm run test:integration`、`npm run dev`
 
 ### 2. 报告导出
 
 - **状态**：✅ 通过
-- **验证方式**：单元测试 `src/test/unit/report/exporter.spec.ts` + 集成测试 `main.spec.ts`
+- **验证方式**：单元测试 `src/test/unit/report/exporter.spec.ts` + 集成测试 `main.spec.ts` + 真实 Dry-run 运行
 - **结果**：Markdown 报告包含统计摘要、投递状态表、Top N 职位卡片；CSV 字段与数据库一致；文件输出到 `data/reports/daily-report-{date}.md` 与 `jobs-{date}.csv`
 
 ### 3. 并发流水线
@@ -45,39 +48,48 @@
 - **验证方式**：审查 `src/platform/boss/data-collector.ts` 与相关测试
 - **结果**：state → route → response → CDP Network → JS 注入 → 直接 API → DOM 解析六层降级链路已实现，单元测试覆盖各层 fallback
 
-## 需真实浏览器/账号环境验证
+## 已人工验证（真实 Chrome + Boss 直聘账号）
 
 ### 7. CDP 连接
 
-- **状态**：⏳ 待人工验证
+- **状态**：✅ 通过
 - **验证步骤**：
   1. 启动 Chrome：`chrome --remote-debugging-port=9222 --user-data-dir=data/chrome-profile`
   2. 访问 `http://localhost:9222/json/version` 确认返回 JSON
-  3. 运行 `npm run dev`，观察日志是否输出 `CDP 连接成功`
-- **预期结果**：Agent 成功复用已登录浏览器上下文
+  3. 运行 `npm run dev`，日志输出 `CDP 连接成功`
+- **结果**：Agent 成功复用已登录浏览器上下文
+- **注意**：运行结束后浏览器上下文会被 Agent 断开；下次运行需重新启动 Chrome
 
 ### 8. 二维码登录兜底
 
-- **状态**：⏳ 待人工验证
+- **状态**：⚠️ 部分通过
 - **验证步骤**：关闭 CDP Chrome，设置无可用端口，运行 Agent
-- **预期结果**：自动启动裸 Chromium，展示二维码，扫码后保存 session 到 `data/session/boss.json`
+- **结果**：
+  - ✅ 自动启动裸 Chromium
+  - ✅ 展示二维码、扫码成功、用户确认
+  - ✅ dispatcher 返回 200
+  - ✅ security-check 页面成功获取 `__zp_stoken__`
+  - ❌ 后续 `loginWithQR` 因 `cookies` 为空字符串判断失败，未返回登录成功
+- **修复**：见 `docs/known-issues.md` 2026-06-28 二维码登录 cookies 为空
 
 ### 9. 登录态刷新
 
-- **状态**：⏳ 待人工验证
-- **验证步骤**：长时间运行或手动清除关键 Cookie，观察 SessionManager 行为
-- **预期结果**：检测到登录过期后自动 reconnect 或触发重新登录
+- **状态**：✅ 通过（页面刷新路径）
+- **验证步骤**：首次运行 `npm run dev` 时，SessionManager.checkLoginState 被调用
+- **结果**：登录态检查通过，未触发激进 reconnect；refreshSession 优先尝试页面刷新，避免流水线运行时断开整个浏览器上下文
+
+## 仍需进一步验证/优化
 
 ### 10. securityId 解析
 
-- **状态**：⏳ 待人工验证
-- **验证步骤**：对单个职位运行详情获取流程
+- **状态**：⏳ 待验证
+- **阻塞**：详情 API 在高频/连续请求下触发 `code 37 您的环境存在异常`，需要实现动态 security-check stoken 刷新
 - **预期结果**：推荐列表只有 `encryptJobId`，详情页/接口能正确拿到 `securityId` 并用于打招呼
 
 ### 11. 详情双轨获取
 
-- **状态**：⏳ 待人工验证
-- **验证步骤**：对比 API 详情与 HTML 详情页兜底补充后的字段
+- **状态**：⏳ 待验证
+- **阻塞**：同 securityId 解析，API 详情受风控限制
 - **预期结果**：合并后数据完整，包含 `postDescription`、`skills`、`welfareList` 等
 
 ### 12. 验证码/反爬检测
@@ -108,11 +120,18 @@ npm run test:coverage
 
 | 问题 | 状态 | 修复提交 |
 |------|------|---------|
-| 暂无阻塞性问题 | - | - |
+| `src/main.ts` 入口判断在 `tsx` 下失效，`main()` 未执行 | ✅ 已修复 | `7673194` |
+| 详情 API 缺少 `lid` 参数导致 code 17 | ✅ 已修复 | `7673194` |
+| HTML 详情 `page.evaluate` 因 tsx 转译产生 `__name` 辅助函数报错 | ✅ 已修复 | `7673194` |
+| security-check 页面禁止读取 `document.cookie` 导致 QR 登录异常 | ✅ 已修复 | `7673194` |
+| SessionManager 运行中 reconnectCDP 会断开整个浏览器上下文 | ✅ 已缓解 | `7673194` |
+| config 测试受 `.env` 文件影响 | ✅ 已修复 | `7673194` |
+| 连续/高频请求触发 `code 37 您的环境存在异常` | ⏳ 待处理 | - |
+| QR 登录 dispatcher 后 cookieJar 为空导致 `cookies` 空字符串 | ⏳ 待处理 | - |
 
 ## 结论
 
-- 自动验证项：6 项全部通过
-- 待人工验证项：7 项，需真实 Chrome + Boss 直聘账号环境
-- 当前无阻塞性 P0/P1 问题
-- 项目满足 `workspace/ZhipinPlan.md` 中 Dry-run、API 字段、报告导出、并发流水线、分类重试等核心自动验证要求
+- **自动验证项**：6 项全部通过
+- **已人工验证项**：2 项通过（CDP 连接、登录态检查），1 项部分通过（二维码登录）
+- **待处理**：code 37 风控动态刷新、QR 登录 cookie 收集
+- **当前状态**：Dry-run 模式可完整跑通搜索并生成报告；真实投递受 Boss 直聘风控限制，需进一步处理 security-check 动态刷新

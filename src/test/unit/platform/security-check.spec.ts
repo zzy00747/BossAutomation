@@ -17,15 +17,14 @@ describe('security-check', () => {
     expect(stoken).toBe('stoken-abc');
   });
 
-  it('extracts __zp_stoken__ from JS cookies', async () => {
+  it('returns null when context cookies lack __zp_stoken__', async () => {
     const page = new MockPage();
     vi.spyOn(page, 'goto').mockResolvedValue(undefined);
-    vi.spyOn(page, 'evaluate').mockResolvedValue('__zp_stoken__=stoken-js; other=1');
 
     const context = new MockBrowserContext();
-    vi.spyOn(context, 'cookies').mockResolvedValue([]);
+    vi.spyOn(context, 'cookies').mockResolvedValue([{ name: 'other', value: '1' }]);
 
     const stoken = await getStokenFromSecurityCheck(page, context, undefined, { postLoadDelayMs: 0 });
-    expect(stoken).toBe('stoken-js');
+    expect(stoken).toBeNull();
   });
 });
