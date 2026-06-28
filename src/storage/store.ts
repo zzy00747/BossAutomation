@@ -283,6 +283,16 @@ export class JobStorage implements IJobStorage {
     }
   }
 
+  async getJobsByDate(date: string): Promise<JobRecord[]> {
+    // created_at 以毫秒时间戳存储，按本地日期 YYYY-MM-DD 过滤。
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM jobs WHERE strftime('%Y-%m-%d', created_at / 1000, 'unixepoch', 'localtime') = ? ORDER BY created_at`,
+      )
+      .all(date) as JobRow[];
+    return rows.map((r) => this.rowToRecord(r));
+  }
+
   async close(): Promise<void> {
     await this.writeQueue.drain();
     this.writeQueue.close();

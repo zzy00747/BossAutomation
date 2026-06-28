@@ -87,6 +87,12 @@ export class MockJobStorage implements IJobStorage {
     return this.llmCache.get(encryptJobId)?.result;
   }
 
+  async getJobsByDate(date: string): Promise<JobRecord[]> {
+    return Array.from(this.jobs.values())
+      .filter((j) => toLocalDateKey(j.createdAt) === date)
+      .sort((a, b) => a.createdAt - b.createdAt);
+  }
+
   async close(): Promise<void> {}
 
   // Test helpers
@@ -97,4 +103,12 @@ export class MockJobStorage implements IJobStorage {
   getCachedResults(): Map<string, { result: ScreenResult; cachedAt: number }> {
     return this.llmCache;
   }
+}
+
+function toLocalDateKey(epochMs: number): string {
+  const d = new Date(epochMs);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }

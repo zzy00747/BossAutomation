@@ -116,6 +116,9 @@ describe('core interfaces are implementable', () => {
       async getLLMCache(): Promise<ScreenResult | undefined> {
         return undefined;
       }
+      async getJobsByDate(): Promise<JobRecord[]> {
+        return [];
+      }
     }
     expect(new FakeStorage()).toBeDefined();
   });

@@ -25,6 +25,14 @@ function makeJob(overrides: Partial<JobRecord> = {}): JobRecord {
   };
 }
 
+function toLocalDateKey(epochMs: number): string {
+  const d = new Date(epochMs);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 describe('SQLiteWriteQueue', () => {
   // JobStorage 内部即用 SQLiteWriteQueue，下面并发测试间接覆盖队列。
 
@@ -241,6 +249,29 @@ describe('JobStorage', () => {
         }),
       );
       expect(await storage.getLLMCache('bad')).toBeUndefined();
+    });
+  });
+
+  describe('getJobsByDate', () => {
+    it('返回当天创建的职位', async () => {
+      const now = Date.now();
+      await storage.saveJob(makeJob({ encryptJobId: 'today-1', createdAt: now }));
+      await storage.saveJob(makeJob({ encryptJobId: 'today-2', createdAt: now + 1 }));
+      // 昨天的职位
+      const yesterdayMs = now - 25 * 60 * 60 * 1000;
+      await storage.saveJob(makeJob({ encryptJobId: 'yesterday', createdAt: yesterdayMs }));
+
+      const todayKey = toLocalDateKey(now);
+      const jobs = await storage.getJobsByDate(todayKey);
+      const ids = jobs.map((j) => j.encryptJobId);
+      expect(ids).toContain('today-1');
+      expect(ids).toContain('today-2');
+      expect(ids).not.toContain('yesterday');
+    });
+
+    it('无匹配返回空数组', async () => {
+      const jobs = await storage.getJobsByDate('1999-01-01');
+      expect(jobs).toEqual([]);
     });
   });
 

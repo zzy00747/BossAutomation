@@ -25,5 +25,8 @@ export interface IJobStorage {
   cacheLLMResult(encryptJobId: string, result: ScreenResult, ttlDays?: number): Promise<void>;
   getLLMCache(encryptJobId: string): Promise<ScreenResult | undefined>;
 
+  /** 查询某天（按 createdAt 日期）创建或处理的职位记录，用于报告导出。 */
+  getJobsByDate(date: string): Promise<JobRecord[]>;
+
   close?(): Promise<void>;
 }
