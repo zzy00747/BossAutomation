@@ -133,10 +133,19 @@ export class BossQRLoginService {
     const response = await this.request(url, { method: 'GET' });
     this.logger.info({ status: response.status }, 'dispatcher 响应');
 
-    const cookieStr = Array.from(this.cookieJar.entries())
-      .map(([k, v]) => `${k}=${v}`)
-      .join('; ');
-    return cookieStr;
+    // 优先从浏览器 context 读取真实 Cookie（含 HttpOnly），而不是依赖手工维护的 cookieJar
+    const contextCookies = await this.context.cookies('https://www.zhipin.com');
+    const cookiePairs: string[] = [];
+    for (const c of contextCookies) {
+      cookiePairs.push(`${c.name}=${c.value}`);
+      this.cookieJar.set(c.name, c.value);
+    }
+
+    const jarCookies = Array.from(this.cookieJar.entries())
+      .filter(([k]) => !contextCookies.some((c) => c.name === k))
+      .map(([k, v]) => `${k}=${v}`);
+
+    return [...cookiePairs, ...jarCookies].join('; ');
   }
 
   async run(): Promise<QRLoginResult> {
