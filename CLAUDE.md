@@ -205,6 +205,7 @@ git commit -m "[docs] 记录验证码选择器兼容性问题"
 5. **`page.route()` 默认可能漏掉 `fetch` 请求。** 部分请求通过 `fetch()` 发起，建议显式匹配 `**/*`，必要时用 `page.evaluate()` 注入拦截器。
 6. **有头模式下的窗口焦点。** Windows 上有头模式如果窗口最小化，某些 `waitForSelector` 可能超时，建议保持窗口可见。
 7. **CDP 端口冲突。** 如果 Chrome 已经在运行但没有带 `--remote-debugging-port`，需要先关闭再重新启动，否则 session 数据目录会被锁定。
+8. **`localhost:9222` 在 Windows 下可能解析为 ::1。** Playwright 连接 CDP 时若使用 `http://localhost:9222`，可能解析到 IPv6，而 Chrome 默认监听 IPv4，导致 `ECONNREFUSED`。配置与启动命令都建议使用 `http://127.0.0.1:9222` 并加 `--remote-debugging-address=127.0.0.1`。
 
 #### SQLite 相关
 8. **并发写入导致 `SQLITE_BUSY`。** 默认 `journal_mode` 是 delete，必须改为 WAL 模式（`PRAGMA journal_mode=WAL`），且所有写入通过队列序列化。

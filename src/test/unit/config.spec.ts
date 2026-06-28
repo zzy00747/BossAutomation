@@ -39,6 +39,18 @@ describe('config loading', () => {
     }
     process.env.OPENAI_API_KEY = '';
     process.env.ANTHROPIC_API_KEY = '';
+    // 给 dotenv 可能从 .env 加载的变量设置回默认值，避免 .env 污染测试
+    process.env.CDP_URL = 'http://localhost:9222';
+    process.env.DRY_RUN = 'true';
+    process.env.LLM_PROVIDER = 'openai';
+    process.env.LLM_MODEL = 'gpt-4o-mini';
+    process.env.MATCH_SCORE_THRESHOLD = '75';
+    process.env.APPLY_DAILY_LIMIT = '20';
+    process.env.DETAIL_CONCURRENCY = '3';
+    process.env.LLM_CONCURRENCY = '5';
+    process.env.APPLY_CONCURRENCY = '1';
+    process.env.SCREENSHOT_DIR = 'data/logs/screenshots';
+    process.env.DB_PATH = 'data/jobs.sqlite';
   });
 
   it('uses recommended defaults', () => {

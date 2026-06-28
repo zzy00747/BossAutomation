@@ -40,10 +40,12 @@ cp .env.example .env
 
 ### 浏览器配置
 
-| 环境变量 | 说明 | 默认值 |
+| 环境变量 | 说明 | 建议值 |
 |----------|------|--------|
-| `CDP_URL` | Chrome DevTools Protocol 地址 | `http://localhost:9222` |
-| `CHROME_PATH` | Chrome 可执行文件路径，留空自动探测 | 自动 |
+| `CDP_URL` | Chrome DevTools Protocol 地址 | `http://127.0.0.1:9222` |
+| `CHROME_PATH` | 系统 Chrome 可执行文件路径，用于 CDP 不可用时 fallback | Windows: `C:\Program Files\Google\Chrome\Application\chrome.exe` |
+
+> **注意**：Windows 下 Playwright 可能把 `localhost` 解析为 `::1`（IPv6），而 Chrome 默认监听 `127.0.0.1`（IPv4），会导致 `ECONNREFUSED ::1:9222`。建议 `CDP_URL` 与启动参数都显式使用 `127.0.0.1`。
 
 ### 业务配置
 
@@ -77,11 +79,13 @@ React TypeScript 前端工程师，期望薪资 25-40K，base 北京
 # macOS
 /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
   --remote-debugging-port=9222 \
+  --remote-debugging-address=127.0.0.1 \
   --user-data-dir=data/chrome-profile
 
 # Windows
 "C:\Program Files\Google\Chrome\Application\chrome.exe" ^
   --remote-debugging-port=9222 ^
+  --remote-debugging-address=127.0.0.1 ^
   --user-data-dir=data\chrome-profile
 ```
 
