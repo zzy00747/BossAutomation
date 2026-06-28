@@ -24,6 +24,7 @@ import { ReportExporter } from './report/exporter.js';
 import { startMemoryMonitor } from './utils/memory-monitor.js';
 import { cleanOldScreenshots } from './utils/screenshot-cleanup.js';
 import { randomSleep } from './browser/human-actions.js';
+import { BrowserSecurityCheckHandler } from './platform/boss/security-check-handler.js';
 import type { SearchConfig } from './pipeline/workers/browser-producer.js';
 import type { JobSearchParams } from './types.js';
 
@@ -88,7 +89,8 @@ export async function buildRuntime(options: BuildRuntimeOptions = {}): Promise<R
   });
   const cookieManager = new CookieManager(context);
   const requestBuilder = new BossRequestBuilder({ page, cookieManager });
-  const apiClient = new BossAPIClient({ requestBuilder });
+  const securityCheckHandler = new BrowserSecurityCheckHandler({ page, context, logger });
+  const apiClient = new BossAPIClient({ requestBuilder, securityCheckHandler });
 
   const searchService = new JobSearchService({
     apiClient,

@@ -55,12 +55,12 @@
 
 - **现象**：第一个搜索配置成功，第二个搜索配置或详情 API 返回 `code: 37, message: 您的环境存在异常`，响应体含 `seed/name/ts`。
 - **根因**：Boss 直聘安全校验 `__zp_stoken__` 具有时效性，连续请求会触发风控要求刷新 stoken。
-- **解决**：暂未实现自动刷新；当前建议降低请求频率（单关键词、单页），并避免连续运行。
-- **预防**：生产环境需要实现 code 37 自动处理：用响应中的 seed/name/ts 访问 `security-check.html` 刷新 `__zp_stoken__`，然后重试原请求。该逻辑涉及安全验证绕过，需在账号可接受风险范围内谨慎实现。
+- **解决**：已在 `BossAPIClient` 实现 code 37 动态刷新：检测到 `code === 37` 且响应 `zpData` 含 `seed/name/ts` 时，调用注入的 `SecurityCheckHandler`（`BrowserSecurityCheckHandler`）访问 `security-check.html` 刷新 `__zp_stoken__` Cookie，刷新成功后自动重试一次原请求。刷新失败或未注入 handler 时抛 `BossAPIError(code=37)` 由上层分类重试处理。
+- **预防**：Boss 直聘风控要求刷新 stoken 时会返回 `seed/name/ts`，需以这三个参数构造 `security-check.html` URL 才能正确刷新，不能复用旧 seed。`__zp_stoken__` 为 HttpOnly，必须用 `context.cookies()` 读取。
 
 ### 7. 二维码登录 dispatcher 后 cookieJar 为空
 
 - **现象**：二维码登录扫码、确认、dispatcher 均成功，security-check 也拿到 stoken，但 `loginWithQR` 判断 `result.cookies` 为空字符串，判定登录失败。
-- **根因**：`BossQRLoginService.getDispatcherCookie` 从 `this.cookieJar` 拼接 Cookie，但实际 HTTP 响应的 Set-Cookie 未正确存入 cookieJar。
-- **解决**：暂未修复；CDP 优先模式下通常不需要 QR 登录。
-- **预防**：QR 登录兜底需完整模拟浏览器 Cookie 存储；建议使用 Playwright 原生请求（带 cookie 持久化）而非手工维护 cookieJar。
+- **根因**：`BossQRLoginService.getDispatcherCookie` 仅从手工维护的 `this.cookieJar` 拼接 Cookie，但 dispatcher 的 HTTP 响应 `Set-Cookie` 未被 Node `fetch` 写入 cookieJar（部分登录态 Cookie 由浏览器上下文持有，且可能是 HttpOnly），导致拼接结果为空。
+- **解决**：`getDispatcherCookie` 改为优先从浏览器 `context.cookies('https://www.zhipin.com')` 读取真实 Cookie（含 HttpOnly），并回填到 cookieJar；仅对 context 未覆盖的字段回退到 cookieJar。这样即使 HTTP `Set-Cookie` 为空，也能拿到浏览器已有的登录态 Cookie。
+- **预防**：QR 登录兜底涉及 HttpOnly Cookie，应优先使用 Playwright `context.cookies()` 而非手工维护 cookieJar。CDP 优先模式下通常不需要 QR 登录。

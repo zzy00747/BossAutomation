@@ -4,13 +4,14 @@ import { BossAPIClient, BossAPIError } from '../../../platform/boss/api.js';
 import { BossRequestBuilder } from '../../../platform/boss/request-builder.js';
 import { CookieManager } from '../../../platform/boss/cookie-manager.js';
 import { MockPage, MockBrowserContext } from '../../__mocks__/mock-browser.js';
+import type { SecurityCheckHandler, SecurityCheckPayload } from '../../../interfaces/api.js';
 import { server } from '../../msw/handlers.js';
 import { fixtureJobs } from '../../fixtures/jobs.js';
 
-function createClient(page: MockPage) {
+function createClient(page: MockPage, securityCheckHandler?: SecurityCheckHandler) {
   const cookieManager = new CookieManager(new MockBrowserContext());
   const requestBuilder = new BossRequestBuilder({ page, cookieManager });
-  return new BossAPIClient({ requestBuilder });
+  return new BossAPIClient({ requestBuilder, securityCheckHandler });
 }
 
 describe('BossAPIClient', () => {
@@ -147,5 +148,86 @@ describe('BossAPIClient', () => {
     );
     const client = createClient(page);
     await expect(client.getRecommendJobs({ page: 1 })).rejects.toThrow();
+  });
+
+  describe('code 37 风控动态刷新', () => {
+    const securityCheckPayload: SecurityCheckPayload = {
+      seed: 'ttttZij2JIIK+xUw73+6ZmzsaYKTbDQuIH6OR6Bm54o=',
+      name: 'e331459e',
+      ts: 1782631991720,
+    };
+
+    function buildCode37Body() {
+      return {
+        code: 37,
+        message: '您的环境存在异常',
+        zpData: {
+          seed: securityCheckPayload.seed,
+          name: securityCheckPayload.name,
+          ts: securityCheckPayload.ts,
+        },
+      };
+    }
+
+    it('收到 code 37 后刷新 stoken 并重试一次，返回成功数据', async () => {
+      let callCount = 0;
+      server.use(
+        http.get('https://www.zhipin.com/wapi/zpgeek/pc/recommend/job/list.json', () => {
+          callCount += 1;
+          if (callCount === 1) {
+            return HttpResponse.json(buildCode37Body());
+          }
+          return HttpResponse.json({
+            code: 0,
+            message: 'OK',
+            zpData: { jobList: [{ id: 'recovered-1', jobName: 'x', brandName: 'b' }], hasMore: false },
+          });
+        }),
+      );
+
+      const handler: SecurityCheckHandler = {
+        refreshStoken: vi.fn().mockResolvedValue(true),
+      };
+      const client = createClient(page, handler);
+      const res = await client.getRecommendJobs({ page: 1 });
+
+      expect(res.code).toBe(0);
+      expect(res.jobList[0].encryptJobId).toBe('recovered-1');
+      expect(handler.refreshStoken).toHaveBeenCalledTimes(1);
+      expect(handler.refreshStoken).toHaveBeenCalledWith(securityCheckPayload);
+    });
+
+    it('刷新失败时抛 BossAPIError(code=37)', async () => {
+      server.use(
+        http.get('https://www.zhipin.com/wapi/zpgeek/pc/recommend/job/list.json', () =>
+          HttpResponse.json(buildCode37Body()),
+        ),
+      );
+
+      const handler: SecurityCheckHandler = {
+        refreshStoken: vi.fn().mockResolvedValue(false),
+      };
+      const client = createClient(page, handler);
+
+      await expect(client.getRecommendJobs({ page: 1 })).rejects.toMatchObject({
+        name: 'BossAPIError',
+        code: 37,
+      });
+      expect(handler.refreshStoken).toHaveBeenCalledTimes(1);
+    });
+
+    it('未注入 securityCheckHandler 时直接抛 code 37 错误', async () => {
+      server.use(
+        http.get('https://www.zhipin.com/wapi/zpgeek/pc/recommend/job/list.json', () =>
+          HttpResponse.json(buildCode37Body()),
+        ),
+      );
+      const client = createClient(page);
+
+      await expect(client.getRecommendJobs({ page: 1 })).rejects.toMatchObject({
+        name: 'BossAPIError',
+        code: 37,
+      });
+    });
   });
 });

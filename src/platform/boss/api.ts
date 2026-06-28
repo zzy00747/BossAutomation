@@ -1,4 +1,4 @@
-import type { IBossAPIClient } from '../../interfaces/api.js';
+import type { IBossAPIClient, SecurityCheckHandler, SecurityCheckPayload } from '../../interfaces/api.js';
 import type {
   GreetResult,
   JobDetail,
@@ -63,6 +63,8 @@ interface RawGreetResponse {
 
 export interface BossAPIClientOptions {
   requestBuilder: BossRequestBuilder;
+  /** code 37 风控时刷新 __zp_stoken__ 的处理器。 */
+  securityCheckHandler?: SecurityCheckHandler;
   /** 自定义 fetch（测试注入）。默认全局 fetch。 */
   fetchImpl?: typeof fetch;
 }
@@ -75,54 +77,52 @@ export interface BossAPIClientOptions {
 export class BossAPIClient implements IBossAPIClient {
   private requestBuilder: BossRequestBuilder;
   private fetchImpl: typeof fetch;
+  private securityCheckHandler?: SecurityCheckHandler;
 
   constructor(options: BossAPIClientOptions) {
     this.requestBuilder = options.requestBuilder;
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
+    this.securityCheckHandler = options.securityCheckHandler;
   }
 
   async getRecommendJobs(params: JobSearchParams): Promise<JobListResponse> {
     const url = getRecommendJobsUrl(params);
-    const headers = await this.requestBuilder.buildHeaders({
-      referer: 'https://www.zhipin.com/web/geek/job',
-    });
+    const body = await this.requestWithSecurityCheck(
+      url,
+      'https://www.zhipin.com/web/geek/job',
+      'recommend',
+    );
+    const typedBody = body as unknown as RawListResponse;
 
-    const res = await this.fetchImpl(url, { headers, method: 'GET' });
-    const body = (await this.parseBody(res)) as unknown as RawListResponse;
-
-    this.assertOk(res.status, body);
-
-    const zpData = body.zpData ?? {};
-    const rawList = zpData.jobList ?? body.jobList ?? [];
+    const zpData = typedBody.zpData ?? {};
+    const rawList = zpData.jobList ?? typedBody.jobList ?? [];
     const jobList = normalizeJobList(rawList);
 
     return {
-      code: body.code,
-      message: body.message ?? '',
+      code: typedBody.code,
+      message: typedBody.message ?? '',
       jobList,
-      hasMore: zpData.hasMore ?? body.hasMore ?? false,
-      cursor: zpData.cursor ?? body.cursor,
-      total: zpData.total ?? body.total,
+      hasMore: zpData.hasMore ?? typedBody.hasMore ?? false,
+      cursor: zpData.cursor ?? typedBody.cursor,
+      total: zpData.total ?? typedBody.total,
     };
   }
 
   async getJobDetail(job: NormalizedJob): Promise<JobDetail> {
     const url = getJobDetailApiUrl(job.encryptJobId, job.lid);
-    const headers = await this.requestBuilder.buildHeaders({
-      referer: `https://www.zhipin.com/job_detail/${job.encryptJobId}.html`,
-    });
+    const body = await this.requestWithSecurityCheck(
+      url,
+      `https://www.zhipin.com/job_detail/${job.encryptJobId}.html`,
+      'detail',
+    );
+    const typedBody = body as unknown as RawDetailResponse;
 
-    const res = await this.fetchImpl(url, { headers, method: 'GET' });
-    const body = (await this.parseBody(res)) as unknown as RawDetailResponse;
-
-    this.assertOk(res.status, body);
-
-    const detail = body.zpData;
+    const detail = typedBody.zpData;
     if (!detail || !detail.postDescription) {
       throw new BossAPIError('职位详情数据缺失', {
-        statusCode: res.status,
-        code: body.code,
-        resBody: body,
+        statusCode: 200,
+        code: typedBody.code,
+        resBody: typedBody,
       });
     }
 
@@ -141,29 +141,59 @@ export class BossAPIClient implements IBossAPIClient {
   ): Promise<GreetResult> {
     void greeting;
     const url = getGreetUrl(securityId, encryptJobId);
-    const headers = await this.requestBuilder.buildHeaders({
-      referer: `https://www.zhipin.com/job_detail/${encryptJobId}.html`,
-    });
+    const body = await this.requestWithSecurityCheck(
+      url,
+      `https://www.zhipin.com/job_detail/${encryptJobId}.html`,
+      'greet',
+    );
+    const typedBody = body as unknown as RawGreetResponse;
 
-    const res = await this.fetchImpl(url, { headers, method: 'GET' });
-    const body = (await this.parseBody(res)) as unknown as RawGreetResponse;
-
-    if (res.status === 401 || body.code === 3001) {
-      throw new BossAPIError('登录态过期', { statusCode: res.status, code: body.code, resBody: body });
-    }
-    if (res.status === 403) {
-      throw new BossAPIError('风控拒绝', { statusCode: res.status, code: body.code, resBody: body });
-    }
-    if (res.status === 429) {
-      throw new BossAPIError('请求限流', { statusCode: res.status, code: body.code, resBody: body });
+    if (typedBody.code === 401 || typedBody.code === 3001) {
+      throw new BossAPIError('登录态过期', { statusCode: 200, code: typedBody.code, resBody: typedBody });
     }
 
     return {
-      success: body.code === 0,
-      code: body.code,
-      message: body.message,
-      data: body.zpData,
+      success: typedBody.code === 0,
+      code: typedBody.code,
+      message: typedBody.message,
+      data: typedBody.zpData,
     };
+  }
+
+  private async requestWithSecurityCheck(
+    url: string,
+    referer: string,
+    _operation: string,
+  ): Promise<Record<string, unknown>> {
+    const headers = await this.requestBuilder.buildHeaders({ referer });
+    const res = await this.fetchImpl(url, { headers, method: 'GET' });
+    const body = (await this.parseBody(res)) as Record<string, unknown>;
+
+    if (res.status === 200 && body.code === 37) {
+      const payload = this.extractSecurityCheckPayload(body);
+      if (payload && this.securityCheckHandler) {
+        const refreshed = await this.securityCheckHandler.refreshStoken(payload);
+        if (refreshed) {
+          // 刷新 Cookie 后重试一次
+          const retryHeaders = await this.requestBuilder.buildHeaders({ referer });
+          const retryRes = await this.fetchImpl(url, { headers: retryHeaders, method: 'GET' });
+          return this.parseBody(retryRes);
+        }
+      }
+    }
+
+    this.assertOk(res.status, body as { code: number; message?: string });
+    return body;
+  }
+
+  private extractSecurityCheckPayload(body: Record<string, unknown>): SecurityCheckPayload | null {
+    const zpData = body.zpData as Record<string, unknown> | undefined;
+    if (!zpData) return null;
+    const seed = typeof zpData.seed === 'string' ? zpData.seed : undefined;
+    const name = typeof zpData.name === 'string' ? zpData.name : undefined;
+    const ts = typeof zpData.ts === 'number' ? zpData.ts : undefined;
+    if (!seed || !name || ts === undefined) return null;
+    return { seed, name, ts };
   }
 
   private assertOk(status: number, body: { code: number; message?: string }): void {
@@ -172,11 +202,14 @@ export class BossAPIClient implements IBossAPIClient {
     if (status === 401 || body.code === 3001) {
       throw new BossAPIError('登录态过期', { statusCode: status, code: body.code, resBody: body });
     }
-    if (status === 403) {
+    if (status === 403 || body.code === 403) {
       throw new BossAPIError('风控拒绝', { statusCode: status, code: body.code, resBody: body });
     }
-    if (status === 429) {
+    if (status === 429 || body.code === 429) {
       throw new BossAPIError('请求限流', { statusCode: status, code: body.code, resBody: body });
+    }
+    if (body.code === 37) {
+      throw new BossAPIError('您的环境存在异常', { statusCode: status, code: body.code, resBody: body });
     }
 
     throw new BossAPIError(body.message ?? `Boss API 错误 (status=${status})`, {
